@@ -434,7 +434,12 @@ class BaseChar:
         self._is_forte_full = white_percent > 0.08
         return self._is_forte_full
 
-    def liberation_available(self):
+    def liberation_available(self, wait_if_cd_ready=0):
+        start = time.time()
+        while time.time() - start < wait_if_cd_ready and not self.liberation_available() and not self.has_cd(
+                'liberation'):
+            self.logger.debug(f'click_liberation wait ready {wait_if_cd_ready}')
+            self.task.next_frame()
         if self.liberation_available_mark:
             return True
         if self.is_current_char:

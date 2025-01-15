@@ -39,16 +39,17 @@ class Encore(BaseChar):
             if not self.can_resonance_step2(delay=4):
                 self.last_resonance = time.time()
                 return self.switch_next_char()
-        if self.click_liberation(wait_if_cd_ready=0.4):
+        if self.liberation_available(wait_if_cd_ready=0.4):
+            if self.echo_available():
+                self.logger.debug('click_echo')
+                self.sleep(0.1)
+                self.click_echo(duration=3)
+            self.click_liberation()
             self.liberation_time = time.time()
             self.n4()
             return self.switch_next_char()
         else:
             self.logger.info('Encore nothing is available')
-        if self.echo_available():
-            self.logger.debug('click_echo')
-            self.click_echo()
-            return self.switch_next_char()
         self.switch_next_char()
 
     def count_liberation_priority(self):
