@@ -156,6 +156,11 @@ class BaseCombatTask(CombatCheck):
                 priority = char.get_switch_priority(current_char, has_intro, target_low_con)
                 logger.info(
                     f'switch_next_char priority: {char} {priority} {char.current_con} target_low_con {target_low_con}')
+            if char.name == "ShoreKeeper":
+                ShoreKeeperIndex = i
+                if char.wait_for_discernment and char.liberation_level == 3:
+                    switch_to = current_char
+                    break
             if target_low_con:
                 if char.current_con < low_con and char != current_char:
                     low_con = char.current_con
@@ -171,6 +176,10 @@ class BaseCombatTask(CombatCheck):
             logger.warning(f"{current_char} can't find next char to switch to, performing too fast add a normal attack")
             current_char.continues_normal_attack(0.2)
             return current_char.switch_next_char()
+        
+        if has_intro and "ShoreKeeperIndex" in locals():
+            self.chars[ShoreKeeperIndex].add_liberation_level()
+            
         switch_to.has_intro = has_intro
         logger.info(f'switch_next_char {current_char} -> {switch_to} has_intro {switch_to.has_intro}')
         last_click = 0
@@ -179,6 +188,8 @@ class BaseCombatTask(CombatCheck):
             now = time.time()
             if now - last_click > 0.1:
                 self.send_key(switch_to.index + 1)
+                if switch_to.name == "ShoreKeeper" and switch_to.discernment:
+                    switch_to.handle_discernment()
                 last_click = now
             in_team, current_index, size = self.in_team()
             if not in_team:
