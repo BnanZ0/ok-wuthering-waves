@@ -119,16 +119,9 @@ config = {
         'ratio': '16:9',
         'min_size': (1280, 720)
     },
-    'git_update': {'sources': [{
-        'name': 'Global',
-        'git_url': 'https://github.com/ok-oldking/ok-ww-update.git',
-        'pip_url': 'https://pypi.org/simple/'
-    }, {
-        'name': 'China',
-        'git_url': 'https://cnb.cool/ok-oldking/ok-wuthering-waves.git',
-        'pip_url': 'https://mirrors.aliyun.com/pypi/simple'
-    }
-    ]},
+    'git_update': {
+        
+    },
     'links': {
         'default': {
             'github': 'https://github.com/ok-oldking/ok-wuthering-waves',
