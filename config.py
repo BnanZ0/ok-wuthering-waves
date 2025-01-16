@@ -54,24 +54,8 @@ config = {
     },
     'git_update': {'sources': [{
         'name': 'Global',
-        'git_url': 'https://github.com/ok-oldking/ok-ww-update.git',
-        'pip_url': 'https://pypi.org/simple/'
-    }, {
-        'name': '清华大学',
-        'git_url': 'https://e.coding.net/g-frfh1513/ok-wuthering-waves/ok-wuthering-waves.git',
-        'pip_url': 'https://pypi.tuna.tsinghua.edu.cn/simple'
-    }, {
-        'name': 'China',
-        'git_url': 'https://e.coding.net/g-frfh1513/ok-wuthering-waves/ok-wuthering-waves.git',
-        'pip_url': 'https://pypi.tuna.tsinghua.edu.cn/simple'
-    }, {
-        'name': '腾讯云',
-        'git_url': 'https://e.coding.net/g-frfh1513/ok-wuthering-waves/ok-wuthering-waves.git',
-        'pip_url': 'https://mirrors.cloud.tencent.com/pypi/simple'
-    }, {
-        'name': '阿里云',
-        'git_url': 'https://e.coding.net/g-frfh1513/ok-wuthering-waves/ok-wuthering-waves.git',
-        'pip_url': 'https://mirrors.aliyun.com/pypi/simple'
+        'git_url': '',
+        'pip_url': ''
     },
     ]},
     'links': {
