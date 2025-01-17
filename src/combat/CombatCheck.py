@@ -13,6 +13,7 @@ class CombatCheck(BaseWWTask):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.long_actionbar_chars_checked = False
         self._in_combat = False
         self.boss_lv_template = None
         self.boss_lv_mask = None
@@ -176,11 +177,17 @@ class CombatCheck(BaseWWTask):
             return True
 
     def has_long_actionbar_chars(self):
-        if not self._in_combat:
-            self.load_chars()
-        current_char = self.get_current_char(raise_exception=False)
-        if current_char and current_char.has_long_actionbar():
-            return True
+        in_team, current_index, count = self.in_team()
+        if in_team:
+            if not self.long_actionbar_chars_checked:
+                self.long_actionbar_chars_checked = True
+                if not self._in_combat:
+                    self.load_chars()
+            current_char = self.get_current_char(raise_exception=False)
+            if current_char and current_char.has_long_actionbar():
+                return True
+        else:
+            self.long_actionbar_chars_checked = False
         return False
 
 
