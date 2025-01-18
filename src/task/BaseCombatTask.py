@@ -462,8 +462,17 @@ class BaseCombatTask(CombatCheck):
 
         # image_with_contours = image.copy()
 
+        blurred = cv2.GaussianBlur(image, (5, 5), 0)
         # Create a binary mask
-        mask = cv2.inRange(image, lower_bound, upper_bound)
+        mask = cv2.inRange(blurred, lower_bound, upper_bound)
+
+        size = mask.shape
+        center_x, center_y = size[1] // 2, size[0] // 2
+        r1, r2 = int(size[0]*0.27), int(size[0]*0.59)
+        cv2.circle(mask, (center_x, center_y), r1, 0, -1)
+        # cv2.circle(image_with_contours, (center_x, center_y), r1, 0, -1)
+        cv2.circle(mask, (center_x, center_y), r2, 0, r1)
+        # cv2.circle(image_with_contours, (center_x, center_y), r2, 0, r1)
 
         # Find connected components
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
