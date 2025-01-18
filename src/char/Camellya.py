@@ -39,7 +39,17 @@ class Camellya(BaseChar):
 
     def do_perform(self):
         if self.has_intro:
-            self.continues_normal_attack(1.2)
+            self.continues_normal_attack(2)
+            start_heavy_att = time.time()
+            self.task.mouse_down()
+            while time.time() - start_heavy_att <= 3.2:
+                self.sleep(0.1, False)
+                if not self.task.in_combat():
+                    self.task.mouse_up()
+                    self.task.raise_not_in_combat('combat check not in combat')
+                if self.get_current_con() >= 0.99:
+                    break
+            self.task.mouse_up()
         self.click_liberation(con_less_than=1)
         start_con = self.get_current_con()
         if start_con < 0.82:
@@ -48,29 +58,56 @@ class Camellya(BaseChar):
             loop_time = 4.1
         budding_start_time = time.time()
         budding = False
+        budding_confidence = 0
         full = False
         while time.time() - budding_start_time < loop_time or self.task.find_one('camellya_budding', threshold=0.7):
-            current_con = self.get_current_con()
-            if (start_con - current_con > 0.1) and not budding:
-                self.logger.info(f'confull start budding {current_con}')
-                budding_start_time = time.time()
-                loop_time = 5.1
-                budding = True
-            elif current_con == 1 and not budding and not full:
-                full = True
-                loop_time = 1
-                budding_start_time = time.time()
-            start_con = current_con
-            if self.click_resonance(send_click=False)[0]:
-                if self.get_current_con() < 0.82 and not budding:
-                    self.click_echo()
-                    return self.switch_next_char()
+            if not budding:
+                start_con = self.get_current_con()
+                if self.click_resonance(send_click=False)[0]:
+                    self.sleep(0.1)
+                    current_con = self.get_current_con()
+                    if (start_con - current_con > 0.1):
+                        budding_confidence += 1
+                        while budding_confidence < 3:
+                            self.sleep(0.1)
+                            if (start_con - self.get_current_con() > 0.1):
+                                budding_confidence += 1
+                            else:
+                                break
+                        if budding_confidence >= 3:
+                            budding = True
+                        else:
+                            budding_confidence = 0
+                    elif current_con == 1 and not full:
+                        full = True
+                        loop_time = 1
+                        budding_start_time = time.time()
+                    elif current_con < 0.82:
+                        self.click_echo()
+                        return self.switch_next_char()
+                else:
+                    self.click(interval=0.1)
                 if budding:
-                    self.click_liberation()
+                    self.logger.info(f'confull start budding {current_con}')
+                    self.sleep(0.7)
+                    budding_start_time = time.time()
+                    loop_time = 5.1
             else:
-                self.click(interval=0.1)
+                if self.liberation_available() and self.click_liberation():
+                    self.sleep(0.2)
+                self.continues_normal_attack(2)
+                start_heavy_att = time.time()
+                self.task.mouse_down()
+                while time.time() - start_heavy_att <= 3.2:
+                    self.sleep(0.1, False)
+                    if not self.task.in_combat():
+                        self.task.mouse_up()
+                        self.task.raise_not_in_combat('combat check not in combat')
+                    if not self.task.find_one('camellya_budding', threshold=0.7):
+                        break
+                self.task.mouse_up()
+                self.sleep(0.1)
             self.task.next_frame()
-            self.check_combat()
         if budding:
             self.click_resonance()
         self.click_echo()
