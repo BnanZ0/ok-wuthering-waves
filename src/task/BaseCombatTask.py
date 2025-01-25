@@ -47,6 +47,67 @@ class BaseCombatTask(CombatCheck):
         self.char_texts = ['char_1_text', 'char_2_text', 'char_3_text']
         self.add_text_fix({'Ｅ':'e'})
 
+    def test_rings(self, current_char):
+        
+        box = self.box_of_screen_scaled(3840, 2160, 1422, 1939, to_x=1566, to_y=2076, name='con_full',
+                                            hcenter=True)
+        
+        image = box.crop_frame(self.frame)
+        char_config = current_char.config
+        target_index = -1
+        if char_config:
+            target_index = char_config.get('_ring_color_index', target_index)
+            # Define the color range
+            lower_bound, upper_bound = color_range_to_bound(con_colors[target_index])
+        else:
+            return
+        
+        self.logger.info(f'lower_bound: {lower_bound} upper_bound: {upper_bound}')
+        #lower_bound, upper_bound = np.array([145, 65, 190]), np.array([175, 105, 230])
+        
+        image_with_contours = image.copy()
+
+        blurred = cv2.GaussianBlur(image, (5, 5), 0)
+        # 锐化操作
+        kernel = np.array([[0, -1, 0],
+                        [-1, 5, -1],
+                        [0, -1, 0]])
+        sharpened = cv2.filter2D(blurred, -1, kernel)
+
+        size = image.shape
+        center_x, center_y = size[1] // 2, size[0] // 2
+        r1, r2 = int(size[0]*0.3), int(size[0]*0.59)
+        cv2.circle(sharpened, (center_x, center_y), r1, 0, -1)
+        cv2.circle(image_with_contours, (center_x, center_y), r1, 0, -1)
+        cv2.circle(sharpened, (center_x, center_y), r2, 0, r1)
+        cv2.circle(image_with_contours, (center_x, center_y), r2, 0, r1)
+
+        sharpened = cv2.convertScaleAbs(sharpened)
+
+        # Create a binary mask
+        mask = cv2.inRange(sharpened, lower_bound, upper_bound)
+
+        # Find connected components
+        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
+        colors = [
+            (0, 255, 0),  # Green
+            (0, 0, 255),  # Red
+            (255, 0, 0),  # Blue
+            (0, 255, 255),  # Yellow
+            (255, 0, 255),  # Magenta
+            (255, 255, 0)  # Cyan
+        ]
+        for label in range(1, num_labels):
+            component_mask = (labels == label).astype(np.uint8) * 255
+            contours, _ = cv2.findContours(component_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            color = colors[label % len(colors)]
+            cv2.drawContours(image_with_contours, contours, -1, color, 2)
+
+        cv2.imwrite(f'test\\test_1.png', image_with_contours)
+        cv2.imwrite(f'test\\test_b.png', blurred)
+        cv2.imwrite(f'test\\test_s.png', sharpened)
+        cv2.imwrite(f'test\\test_m.png', mask)
+
     def send_key_and_wait_animation(self, key, check_function, total_wait=7, enter_animation_wait=0.7):
         start = time.time()
         animation_start = 0
@@ -463,16 +524,23 @@ class BaseCombatTask(CombatCheck):
         # image_with_contours = image.copy()
 
         blurred = cv2.GaussianBlur(image, (5, 5), 0)
-        # Create a binary mask
-        mask = cv2.inRange(blurred, lower_bound, upper_bound)
+        
+        kernel = np.array([[0, -1, 0],
+                        [-1, 5, -1],
+                        [0, -1, 0]])
+        sharpened = cv2.filter2D(blurred, -1, kernel)
 
-        size = mask.shape
+        size = image.shape
         center_x, center_y = size[1] // 2, size[0] // 2
-        r1, r2 = int(size[0]*0.27), int(size[0]*0.59)
-        cv2.circle(mask, (center_x, center_y), r1, 0, -1)
+        r1, r2 = int(size[0]*0.3), int(size[0]*0.59)
+        cv2.circle(sharpened, (center_x, center_y), r1, 0, -1)
         # cv2.circle(image_with_contours, (center_x, center_y), r1, 0, -1)
-        cv2.circle(mask, (center_x, center_y), r2, 0, r1)
+        cv2.circle(sharpened, (center_x, center_y), r2, 0, r1)
         # cv2.circle(image_with_contours, (center_x, center_y), r2, 0, r1)
+        sharpened = cv2.convertScaleAbs(sharpened)
+
+        # Create a binary mask
+        mask = cv2.inRange(sharpened, lower_bound, upper_bound)
 
         # Find connected components
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
@@ -544,8 +612,8 @@ white_color = {
 
 con_colors = [
     {
-        'r': (205, 235),
-        'g': (190, 222),  # for yellow spectro
+        'r': (205, 255),
+        'g': (190, 242),  # for yellow spectro
         'b': (90, 130)
     },
     {
@@ -554,14 +622,14 @@ con_colors = [
         'b': (210, 249)  # Blue range
     },
     {
-        'r': (200, 230),  # Red range
+        'r': (200, 240),  # Red range
         'g': (100, 130),  # Green range    for red fire
         'b': (75, 105)  # Blue range
     },
     {
-        'r': (60, 95),  # Red range
-        'g': (150, 180),  # Green range    for blue ice
-        'b': (210, 245)  # Blue range
+        'r': (50, 95),  # Red range
+        'g': (150, 185),  # Green range    for blue ice
+        'b': (210, 255)  # Blue range
     },
     {
         'r': (70, 110),  # Red range
@@ -569,7 +637,7 @@ con_colors = [
         'b': (155, 190)  # Blue range
     },
     {
-        'r': (190, 220),  # Red range
+        'r': (190, 240),  # Red range
         'g': (65, 105),  # Green range    for havoc
         'b': (145, 175)  # Blue range
     }
