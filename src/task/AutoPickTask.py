@@ -21,6 +21,7 @@ class AutoPickTask(TriggerTask, BaseWWTask, FindFeature):
             'Pick Up White List': ['吸收', 'Absorb'],
             'Pick Up Black List': ['开始合成', '领取奖励', 'Claim', '合成台']
         })
+        self.only_pick_whitelist = True
 
     def send_fs(self):
         if self.debug:
@@ -60,13 +61,24 @@ class AutoPickTask(TriggerTask, BaseWWTask, FindFeature):
                         self.send_fs()
                         return True
             else:
-                if self.config.get('Pick Up Black List'):
-                    texts = self.ocr(box=text_area, match=self.config.get('Pick Up Black List'), log=True)
-                    if texts:
-                        logger.info(f'found Pick Up Black List: {texts}')
-                        return False
-                self.send_fs()
-                return True
+                if not self.only_pick_whitelist:
+                    if self.config.get('Pick Up Black List'):
+                        texts = self.ocr(box=text_area, match=self.config.get('Pick Up Black List'), log=True)
+
+                        if texts:
+                            logger.info(f'found Pick Up Black List: {texts}')
+                            return False
+                    self.send_fs()
+                    return True
+                else:
+                    if self.config.get('Pick Up White List'):
+                        texts = self.ocr(box=text_area, match=self.config.get('Pick Up Black List'), log=True)
+                        
+                        if texts:
+                            logger.info(f'found Pick Up White List {texts}')
+                            self.send_fs()
+                            return True
+                    return False
             self.next_frame()
 
 f_white_color = {
