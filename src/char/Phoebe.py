@@ -7,11 +7,18 @@ class Phoebe(BaseChar):
         super().__init__(*args, **kwargs)
         self.first_liberation = False
         self.perform_intro = 0
+        self.mode = ["Litany", "Confession"]
+        self.Phoebe_mode = None
         
     def reset_state(self):
         super().reset_state()
         self.first_liberation = False
         self.perform_intro = 0
+        self.Phoebe_mode = self.mode[0]
+        for char in self.task.chars:
+            if char.name == "Zani":
+                self.Phoebe_mode = self.mode[1]
+                break
     
     def flying(self):
         return self.current_resonance() == 0 or self.current_echo() == 0
@@ -50,9 +57,11 @@ class Phoebe(BaseChar):
                     return
                 self.click()
                 self.task.next_frame()
-            self.heavy_attack()
+            if not self.litany_or_confession():
+                self.heavy_attack()
         else:
-            self.heavy_attack(1.2)
+            if not self.litany_or_confession():
+                self.heavy_attack(1.2)
         self.first_liberation = True
         if self.is_con_full():
             self.sleep(0.3)
@@ -65,8 +74,23 @@ class Phoebe(BaseChar):
                 break
             self.send_resonance_key()
             self.task.next_frame()
+
+    def litany_or_confession(self):
+        if self.confession_ready():
+            if self.Phoebe_mode == self.mode[1]:
+                self.send_resonance_key(down_time=1.2)
+            else:
+                self.heavy_attack(1.2)
+            return True
+        return False
     
     def litany_ready(self):
+        box = self.task.box_of_screen_scaled(3840, 2160, 2740, 1832, 2803, 1857, name='phoebe_attack', hcenter=True)
+        light_percent = self.task.calculate_color_percentage(phoebe_light_color, box)
+        self.logger.info(f'light_percent {light_percent}')
+        return light_percent > 0.15    
+    
+    def confession_ready(self):
         box = self.task.box_of_screen_scaled(3840, 2160, 3149, 1832, 3225, 1857, name='phoebe_resonance', hcenter=True)
         blue_percent = self.task.calculate_color_percentage(phoebe_blue_color, box)
         self.logger.info(f'blue_percent {blue_percent}')
@@ -78,7 +102,7 @@ class Phoebe(BaseChar):
         self.logger.info(f'light_percent {light_percent}')
         if not self.in_absolutin():
             self.logger.info(f'litany_light_percent {light_percent}')
-        if light_percent > 0.15 or self.is_forte_full() or self.litany_ready():
+        if light_percent > 0.15:
             return True
         blue_percent = self.task.calculate_color_percentage(phoebe_blue_color, box)
         return blue_percent > 0.15
