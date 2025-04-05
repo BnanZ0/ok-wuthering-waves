@@ -37,6 +37,7 @@ class HavocRover(BaseChar):
                 self.check_combat()
                 if self.click_resonance()[0]:
                     self.continues_normal_attack(1.4)
+                    self.sleep(0.2)
                     if not self.liberation_available():
                         return self.switch_next_char()
             self.check_combat()
