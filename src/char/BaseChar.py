@@ -338,7 +338,12 @@ class BaseChar:
             current_time = time.time()
             self.freeze_durations = [item for item in self.freeze_durations if item[0] <= current_time - 15]
             self.freeze_durations.append((start, duration, freeze_time))
+            self.task.total_freeze_durations = [item for item in self.task.total_freeze_durations if item[0] >= current_time - 30]
+            self.task.total_freeze_durations.append((start, duration, freeze_time))
 
+    def total_time_elapsed_accounting_for_freeze(self, start, intro_freeze=False):
+        return self.task.total_time_elapsed_accounting_for_freeze(start, intro_freeze)
+    
     def time_elapsed_accounting_for_freeze(self, start):
         to_minus = 0
         for freeze_start, duration, freeze_time in self.freeze_durations:
