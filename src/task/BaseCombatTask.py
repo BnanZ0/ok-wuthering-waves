@@ -38,6 +38,8 @@ class BaseCombatTask(CombatCheck):
         self.char_texts = ['char_1_text', 'char_2_text', 'char_3_text']
         self.add_text_fix({'Ｅ': 'e'})
 
+        self.total_freeze_durations = []
+
     def send_key_and_wait_animation(self, key, check_function, total_wait=7, enter_animation_wait=0.7):
         start = time.time()
         animation_start = 0
@@ -204,6 +206,10 @@ class BaseCombatTask(CombatCheck):
                 self.in_liberation = False
                 current_char.switch_out()
                 switch_to.is_current_char = True
+                if has_intro:
+                    self.add_intro_freeze_duration(time.time())
+                    if hasattr(current_char, "perform_outro_time"):
+                        current_char.perform_outro_time = time.time()
                 break
 
         if post_action:
@@ -490,6 +496,27 @@ class BaseCombatTask(CombatCheck):
 
         return the_area, is_full
 
+    def add_intro_freeze_duration(self, start, duration=1.4):
+        if duration < 0:
+            duration = time.time() - start
+        if start > 0 and duration > 0.1:
+            current_time = time.time()
+            self.total_freeze_durations = [item for item in self.total_freeze_durations if item[0] >= current_time - 30]
+            self.total_freeze_durations.append((start, duration, -100))
+
+    def total_time_elapsed_accounting_for_freeze(self, start, intro_freeze=False):
+        to_minus = 0
+        for freeze_start, duration, freeze_time in self.total_freeze_durations:
+            if start < freeze_start:
+                if intro_freeze:
+                    to_minus += duration - (0.1 if freeze_time == -100 else freeze_time)
+                else:
+                    if freeze_time == -100:
+                        continue
+                    to_minus += duration - freeze_time
+        if to_minus != 0:
+            self.logger.debug(f'total_time_elapsed_accounting_for_freeze to_minus {to_minus}')
+        return time.time() - start - to_minus
 
 white_color = {
     'r': (253, 255),  # Red range
