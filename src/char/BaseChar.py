@@ -478,6 +478,19 @@ class BaseChar:
                 return
             self.task.click(interval=interval)
 
+    def continues_right_click(self, duration, interval=0.1, direction_key=None):
+        # direction_key = 'w' 'a' 's' 'd'
+        start = time.time()
+        if direction_key is not None:
+            self.task.send_key_down(direction_key)
+            self.task.next_frame()
+        while time.time() - start < duration:
+            self.task.click(interval=interval, key="right")
+            if duration <= interval:
+                break
+        if direction_key is not None:
+            self.task.send_key_up(direction_key)
+
     def normal_attack(self):
         self.logger.debug('normal attack')
         self.check_combat()
