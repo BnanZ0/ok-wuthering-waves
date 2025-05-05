@@ -432,23 +432,33 @@ class BaseCombatTask(CombatCheck):
 
         # image_with_contours = image.copy()
 
-        blurred = cv2.GaussianBlur(image, (5, 5), 0)
-        
-        kernel = np.array([[0, -1, 0],
-                        [-1, 5, -1],
-                        [0, -1, 0]])
-        sharpened = cv2.filter2D(blurred, -1, kernel)
+        def get_adaptive_ksize(image, scale=30, min_size=3, max_size_ratio=0.2):
+            h, w = image.shape[:2]
+            base = min(h, w)
+            raw = base // scale
+            ksize = max(min_size, raw)
+            ksize = ksize if ksize % 2 == 1 else ksize + 1
 
+            # 限制最大核大小
+            max_size = int(base * max_size_ratio)
+            if ksize > max_size:
+                ksize = max_size if max_size % 2 == 1 else max_size - 1
+
+            return ksize
+        
         size = image.shape
+        ksize = get_adaptive_ksize(image)
+        blurred = cv2.GaussianBlur(image, (ksize, ksize), 0)
+        image_fixed = blurred
         center_x, center_y = size[1] // 2, size[0] // 2
         r1, r2 = int(size[0]*0.3), int(size[0]*0.59)
-        cv2.circle(sharpened, (center_x, center_y), r1, 0, -1)
+        cv2.circle(image_fixed, (center_x, center_y), r1, 0, -1)
+        cv2.circle(image_fixed, (center_x, center_y), r2, 0, r1)
         # cv2.circle(image_with_contours, (center_x, center_y), r1, 0, -1)
-        cv2.circle(sharpened, (center_x, center_y), r2, 0, r1)
         # cv2.circle(image_with_contours, (center_x, center_y), r2, 0, r1)
 
         # Create a binary mask
-        mask = cv2.inRange(sharpened, lower_bound, upper_bound)
+        mask = cv2.inRange(image_fixed, lower_bound, upper_bound)
 
         # Find connected components
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
@@ -503,7 +513,8 @@ class BaseCombatTask(CombatCheck):
                 ring_count += 1
 
         # Save or display the image with contours
-        # cv2.imwrite(f'test\\test_{self}_{is_full}_{the_area}_{lower_bound}.jpg', image_with_contours)
+        # cv2.imwrite(f'test/test_contours_{self.__class__.__name__}_{is_full}.jpg', image_with_contours)
+        # cv2.imwrite(f'test/test_image_fixed_{self.__class__.__name__}_{is_full}.jpg', image_fixed)
         if ring_count > 1:
             is_full = False
             the_area = 0
@@ -541,8 +552,8 @@ white_color = {
 
 con_colors = [
     {
-        'r': (205, 255),
-        'g': (190, 242),  # for yellow spectro
+        'r': (205, 235),
+        'g': (190, 222),  # for yellow spectro
         'b': (90, 130)
     },
     {
@@ -551,14 +562,14 @@ con_colors = [
         'b': (210, 249)  # Blue range
     },
     {
-        'r': (200, 240),  # Red range
+        'r': (200, 230),  # Red range
         'g': (100, 130),  # Green range    for red fire
         'b': (75, 105)  # Blue range
     },
     {
-        'r': (50, 95),  # Red range
-        'g': (150, 185),  # Green range    for blue ice
-        'b': (210, 255)  # Blue range
+        'r': (60, 95),  # Red range
+        'g': (150, 180),  # Green range    for blue ice
+        'b': (210, 245)  # Blue range
     },
     {
         'r': (70, 110),  # Red range
@@ -566,7 +577,7 @@ con_colors = [
         'b': (155, 190)  # Blue range
     },
     {
-        'r': (190, 240),  # Red range
+        'r': (190, 220),  # Red range
         'g': (65, 105),  # Green range    for havoc
         'b': (145, 175)  # Blue range
     }
