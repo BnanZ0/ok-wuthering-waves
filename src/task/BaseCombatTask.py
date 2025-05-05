@@ -1,5 +1,6 @@
 import re
 import time
+from decimal import Decimal, ROUND_UP, ROUND_DOWN
 
 import cv2
 import numpy as np
@@ -373,7 +374,7 @@ class BaseCombatTask(CombatCheck):
         return self.get_current_con(char_config) == 1
 
     def get_current_con(self, char_config=None):
-        box = self.box_of_screen_scaled(3840, 2160, 1422, 1939, to_x=1566, to_y=2076, name='con_full',
+        box = self.box_of_screen_scaled(3840, 2160, 1431, 1942, 1557, 2068, name='con_full',
                                         hcenter=True)
         box.confidence = 0
 
@@ -430,29 +431,27 @@ class BaseCombatTask(CombatCheck):
     def count_rings(self, image, color_range, min_area):
         # Define the color range
         lower_bound, upper_bound = color_range_to_bound(color_range)
+        image_fixed = image.copy()
+        h, w = image.shape[:2]
+        center = (w // 2, h // 2)
 
-        # image_with_contours = image.copy()
+        # draw mask
+        r1, r2 = h*0.35119, h*0.42261
+        r1 = Decimal(str(r1)).quantize(Decimal('0'), rounding=ROUND_DOWN)
+        r2 = Decimal(str(r2)).quantize(Decimal('0'), rounding=ROUND_UP)
 
-        blurred = cv2.GaussianBlur(image, (5, 5), 0)
-        
-        kernel = np.array([[0, -1, 0],
-                        [-1, 5, -1],
-                        [0, -1, 0]])
-        sharpened = cv2.filter2D(blurred, -1, kernel)
+        mask = np.zeros((h, w), dtype=np.uint8)
+        cv2.circle(mask, center, int(r2), 255, -1)
+        image_fixed = cv2.bitwise_and(image_fixed, image_fixed, mask=mask)
+        cv2.circle(image_fixed, center, int(r1), 0, -1)
 
-        size = image.shape
-        center_x, center_y = size[1] // 2, size[0] // 2
-        r1, r2 = int(size[0]*0.3), int(size[0]*0.59)
-        cv2.circle(sharpened, (center_x, center_y), r1, 0, -1)
-        # cv2.circle(image_with_contours, (center_x, center_y), r1, 0, -1)
-        cv2.circle(sharpened, (center_x, center_y), r2, 0, r1)
-        # cv2.circle(image_with_contours, (center_x, center_y), r2, 0, r1)
-
-        # Create a binary mask
-        mask = cv2.inRange(sharpened, lower_bound, upper_bound)
+        # Perform closing operation (Dilation followed by Erosion)
+        mask = cv2.inRange(image_fixed, lower_bound, upper_bound)
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        processed_mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
 
         # Find connected components
-        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
+        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(processed_mask, connectivity=8)
 
         colors = [
             (0, 255, 0),  # Green
@@ -485,6 +484,7 @@ class BaseCombatTask(CombatCheck):
             # All conditions met, likely a close ring.
             return True
 
+        output_image = image.copy()
         # Iterate over each component
         ring_count = 0
         is_full = False
@@ -493,9 +493,9 @@ class BaseCombatTask(CombatCheck):
             x, y, width, height, area = stats[label, :5]
             bounding_box_area = width * height
             component_mask = (labels == label).astype(np.uint8) * 255
-            contours, _ = cv2.findContours(component_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            # color = colors[label % len(colors)]
-            # cv2.drawContours(image_with_contours, contours, -1, color, 2)
+            color = colors[label % len(colors)]
+            mask = labels == label
+            output_image[mask] = color
             if bounding_box_area >= min_area:
                 # Select a color from the list based on the label index
                 if is_full_ring(component_mask):
@@ -504,8 +504,11 @@ class BaseCombatTask(CombatCheck):
                 ring_count += 1
 
         # Save or display the image with contours
-        # cv2.imwrite(f'test\\test_{self}_{is_full}_{the_area}_{lower_bound}.jpg', image_with_contours)
+        # cv2.imwrite(fr'D:\vscode\img\ring_count\count_rings_{is_full}_{self.screen_width}_mask.png', output_image)
+        # cv2.imwrite(fr'D:\vscode\img\ring_count\count_rings_{is_full}_{self.screen_width}.png', image_fixed)
         if ring_count > 1:
+            cv2.imwrite(rf'D:\vscode\img\ring_count\{self.__class__.__name__}_ring_count_{ring_count}_mask.png', output_image)
+            cv2.imwrite(rf'D:\vscode\img\ring_count\{self.__class__.__name__}_ring_count_{ring_count}.png', image)
             is_full = False
             the_area = 0
             self.logger.warning(f'is_con_full found multiple rings {ring_count}')
@@ -542,8 +545,8 @@ white_color = {
 
 con_colors = [
     {
-        'r': (205, 255),
-        'g': (190, 242),  # for yellow spectro
+        'r': (205, 235),
+        'g': (190, 222),  # for yellow spectro
         'b': (90, 130)
     },
     {
@@ -552,14 +555,14 @@ con_colors = [
         'b': (210, 249)  # Blue range
     },
     {
-        'r': (200, 240),  # Red range
+        'r': (200, 230),  # Red range
         'g': (100, 130),  # Green range    for red fire
         'b': (75, 105)  # Blue range
     },
     {
-        'r': (50, 95),  # Red range
-        'g': (150, 185),  # Green range    for blue ice
-        'b': (210, 255)  # Blue range
+        'r': (60, 95),  # Red range
+        'g': (150, 180),  # Green range    for blue ice
+        'b': (210, 245)  # Blue range
     },
     {
         'r': (70, 110),  # Red range
@@ -567,7 +570,7 @@ con_colors = [
         'b': (155, 190)  # Blue range
     },
     {
-        'r': (190, 240),  # Red range
+        'r': (190, 220),  # Red range
         'g': (65, 105),  # Green range    for havoc
         'b': (145, 175)  # Blue range
     }
