@@ -522,6 +522,19 @@ class BaseChar:
 
     def flying(self):
         return self.current_resonance() == 0
+    
+    def handle_pause_switching(self, current_char, condition, timeout=5):
+        self.logger.debug(f'handle_pause_switching {current_char}')
+        start = time.time()
+        while condition():
+            if hasattr(current_char, 'on_pause_switching') and callable(current_char.on_pause_switching):
+                current_char.on_pause_switching()
+            else:
+                current_char.continues_normal_attack(0.2)
+            self.check_combat()
+            if time.time() - start > timeout:
+                return
+            self.task.next_frame()
 
 
 forte_white_color = {
