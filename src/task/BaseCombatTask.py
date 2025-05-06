@@ -171,7 +171,11 @@ class BaseCombatTask(CombatCheck):
             logger.warning(f"{current_char} can't find next char to switch to, performing too fast add a normal attack")
             current_char.continues_normal_attack(0.2)
             return current_char.switch_next_char()
-        switch_to.has_intro = has_intro
+        
+        switch_to.has_intro = has_intro or current_char.is_con_full()
+        while switch_to.should_pause_switch():
+            current_char.on_pause_switch()
+
         logger.info(f'switch_next_char {current_char} -> {switch_to} has_intro {switch_to.has_intro}')
         last_click = 0
         start = time.time()
