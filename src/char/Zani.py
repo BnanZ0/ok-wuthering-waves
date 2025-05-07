@@ -12,11 +12,12 @@ class Zani(BaseChar):
         self.nightfall_time = 0
         self.crisis_time = 0
         self.is_crisis_active = False
+        self.blaze = -1
         self.blaze_threshold = 0
         self.in_liberation = False
+        self.liberation_allowed = False
         self.liberation2 = False
         self.first_nightfall = True
-        self.liberation_allowed = False
         self.char_phoebe = None
         
     def reset_state(self):
@@ -25,10 +26,11 @@ class Zani(BaseChar):
         self.nightfall_time = 0
         self.crisis_time = 0
         self.is_crisis_active = False
+        self.blaze = -1
         self.blaze_threshold = 0
         self.in_liberation = False
-        self.liberation2 = False
         self.liberation_allowed = False
+        self.liberation2 = False
         self.char_phoebe = None
 
     def do_perform(self):
@@ -40,6 +42,7 @@ class Zani(BaseChar):
         self.check_liber()
 
         if self.in_liberation:
+            self.logger.debug(f'in_liberation')
             if not self.should_end_liberation():
                 if not self.liberation2:
                     self.logger.debug(f'other nightfall')
@@ -54,8 +57,11 @@ class Zani(BaseChar):
                 self.click()
                 self.task.next_frame()
             self.is_crisis_active = False
+            if not self.liberation_allowed and self.liberation_available():
+                self.liberation_allowed = True
 
         if self.liberation_allowed:
+            self.logger.debug(f'liberation_allowed')
             self.liberation_allowed = False
             if self.click_liberation():
                 self.in_liberation = True
@@ -76,12 +82,14 @@ class Zani(BaseChar):
         if self.echo_available():
             self.click_echo()
 
-        if (not self.is_phoebe_complete() 
-            and self.get_zani_blazes() < self.blaze_threshold
+        if (self.get_zani_blazes() < self.blaze_threshold
+            and not self.is_phoebe_complete()
         ):
             self.logger.debug(f'blazes not enough')
             if not self.standard_defense_protocol_combo():
                 self.continues_normal_attack(0.1)
+            if self.current_liberation() == 0 and self.is_forte_full():
+                self.click_resonance()
             return self.switch_next_char()
 
         if ((self.get_zani_blazes() >= self.blaze_threshold 
@@ -123,10 +131,18 @@ class Zani(BaseChar):
                 self.sleep(0.1)
                 self.continues_normal_attack(0.1)
             else:
-                self.continues_normal_attack(1)
-            self.sleep(1)
+                self.heavy_attack(duration=0.6)
+                self.sleep(0.55)
+                self.continues_normal_attack(0.1)
+            self.sleep(1.2)
             self.click()
-            self.sleep(1.9)
+            start = time.time()
+            while time.time() - start < 1.9:
+                if self.is_forte_full():
+                    break
+                self.check_combat()
+                self.task.next_frame()
+            start = time.time()
             while not self.is_forte_full():
                 self.check_combat()
                 self.click()
@@ -137,7 +153,10 @@ class Zani(BaseChar):
             self.send_resonance_key()
             self.task.next_frame()
         if liberation_after_crisis:
-            self.liberation_allowed = True #19:01,152 18:58,175
+            self.liberation_allowed = True
+        elif self.liberation_available():
+            self.liberation_allowed = True
+
         self.crisis_time = time.time()
         self.is_crisis_active = True
     
@@ -154,6 +173,7 @@ class Zani(BaseChar):
         blazes_percent = 0
         blazes_percent = self.task.calculate_color_percentage(zani_blazes_color, box)
         blazes_percent = Decimal(str(blazes_percent)).quantize(Decimal('0.001'), rounding=ROUND_HALF_UP)
+        self.blaze = blazes_percent
         self.logger.debug(f'blazes_percent {blazes_percent}')
         return blazes_percent
     
@@ -240,7 +260,9 @@ class Zani(BaseChar):
                 if time.time() - start > 2:
                     self.add_freeze_duration(start, time.time()-start)
                     self.logger.debug(f'Zani click liber2 in {time.time()-start}')
+                    self.blaze = -1
                     self.in_liberation = False
+                    self.liberation_allowed = False
                 self.task.in_liberation = False
                 return True
             return False
@@ -248,7 +270,7 @@ class Zani(BaseChar):
     def wait_resonance_not_gray(self, timeout=5):
         #常态 0.16 解放 0.24
         start = time.time()
-        while self.current_resonance() < 0.14:
+        while self.current_resonance() == 0 or self.has_cd('resonance'):
             self.check_combat()
             self.click()
             self.task.next_frame()
@@ -314,10 +336,17 @@ class Zani(BaseChar):
            
     def check_liber(self):
         if self.has_target(self.in_liberation):
-            pass
-        else:
+            return self.in_liberation
+
+        """ if not self.in_liberation:
+            self.logger.debug("Rechecking in_liberation state")
+            self.sleep(0.1, False)
+            if self.has_target(self.in_liberation):
+                return self.in_liberation """
+        self.sleep(0.1, False)
+        if self.has_target(not self.in_liberation):
             self.in_liberation = not self.in_liberation
-        return self.in_liberation        
+        return self.in_liberation       
 
     def decide_teammate(self):
         # 满焰光: 0.741, 菲比一套: 0.709, 菲比一套(排除1点光燥): 0.672, 参考b站视频光主一套 0.518
