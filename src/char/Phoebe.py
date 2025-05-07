@@ -6,7 +6,6 @@ from src.char.Healer import Healer
 class Phoebe(BaseChar):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.first_liberation = False
         self.perform_outro_time = 0
         self.resonance_time = 0
         self.attribute = 0
@@ -17,7 +16,6 @@ class Phoebe(BaseChar):
         
     def reset_state(self):
         super().reset_state()
-        self.first_liberation = False
         self.perform_outro_time = 0
         self.resonance_time = 0
         self.attribute = 0
@@ -61,18 +59,16 @@ class Phoebe(BaseChar):
             self.click_echo()
 
         self.absolution_or_confession()
-        if self.first_liberation and self.liberation_available():
+        if self.star_available and self.liberation_available():
             self.click_liberation()
             if self.starflash_combo(): 
                 return self.switch_next_char()
         if self.resonance_available():
             self.logger.debug('click_resonance_once')
-            if self.resonance_time > 0 and self.all_time_elapsed_accounting_for_freeze(self.resonance_time) <= 11.4:
-                self.update_current_status()
-                if self.is_action_complete:
-                    self.click_resonance() 
-                else:
-                    self.starflash_combo()       
+            if self.resonance_time > 0 and self.total_time_elapsed_accounting_for_freeze(self.resonance_time) <= 11.4:
+                self.starflash_combo()
+                self.click_resonance_once()
+                self.resonance_time = 0
             else:
                 self.click_resonance_once()
                 self.starflash_combo()
@@ -86,6 +82,8 @@ class Phoebe(BaseChar):
     def starflash_combo(self):
         self.logger.debug('perform starflash_combo')
         self.task.wait_in_team_and_world(time_out=3, raise_if_not_found=False)
+        if not self.in_absolution_or_confession() and not self.absolution_or_confession():
+            return
         start = time.time()
         if not self.heavy_attack_ready():
             if not self.has_forte:
@@ -94,7 +92,7 @@ class Phoebe(BaseChar):
                 self.click()
                 if time.time() - start > 5:
                     break
-                if time.time() - start > 0.8 and not self.in_absolution_or_confession():
+                if time.time() - start > 0.5 and not self.in_absolution_or_confession():
                     if not self.absolution_or_confession():
                         return
                 self.click()
@@ -154,7 +152,6 @@ class Phoebe(BaseChar):
                 self.logger.info(f'Enters absolution status')
             
             self.star_available = True
-            self.first_liberation = True
             self.continues_right_click(0.1)
             self.starflash_combo_count = 0
             return True
@@ -191,14 +188,14 @@ class Phoebe(BaseChar):
             times = 2
         else:
             times = 4
-        if (self.first_liberation 
+        if (self.star_available 
             and self.starflash_combo_count == times
             and not self.liberation_available()
         ):
             self.is_action_complete = True
         else:
             self.is_action_complete = False
-        self.logger.debug(f'first_liberation: {self.first_liberation}')
+        self.logger.debug(f'star_available: {self.star_available}')
         self.logger.debug(f'starflash_combo_count: {self.starflash_combo_count}')
         self.logger.debug(f'is_action_complete: {self.is_action_complete}')
 
@@ -219,13 +216,13 @@ class Phoebe(BaseChar):
             if self.liberation_available():
                 self.click_liberation()
             self.update_current_status()
-        if self.is_con_full():
+        if self.attribute == 2 and self.is_con_full():
             self.click_echo()
             self.sleep(0.05)
         return super().switch_next_char(*args)
         
     def do_get_switch_priority(self, current_char: BaseChar, has_intro=False, target_low_con=False):
-        outro_lasted = self.all_time_elapsed_accounting_for_freeze(self.perform_outro_time, intro_freeze=True)
+        outro_lasted = self.total_time_elapsed_accounting_for_freeze(self.perform_outro_time, intro_freeze=True)
         self.logger.debug(f'phoebe outro lasted: {outro_lasted}')
         if outro_lasted < 4.0:
             return Priority.MIN
