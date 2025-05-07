@@ -8,6 +8,7 @@ from src.char.BaseChar import forte_white_color
 class Zani(BaseChar):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.normal_resonance_time = 0
         self.liberaction_time = 0
         self.nightfall_time = 0
         self.crisis_time = 0
@@ -16,13 +17,13 @@ class Zani(BaseChar):
         self.blaze_threshold = 0
         self.in_liberation = False
         self.liberation_allowed = False
-        self.liberation2 = False
         self.first_nightfall = True
         self.char_phoebe = None
         
     def reset_state(self):
         self.last_attack = 0
         super().reset_state()
+        self.normal_resonance_time = 0
         self.liberaction_time = 0
         self.nightfall_time = 0
         self.crisis_time = 0
@@ -31,7 +32,6 @@ class Zani(BaseChar):
         self.blaze_threshold = 0
         self.in_liberation = False
         self.liberation_allowed = False
-        self.liberation2 = False
         self.char_phoebe = None
 
     def do_perform(self):
@@ -41,25 +41,31 @@ class Zani(BaseChar):
             self.logger.debug(f'handle intro')
             self.continues_normal_attack(1.4)
         self.check_liber()
+        if self.echo_available():
+            self.click_echo()
 
         if self.in_liberation:
             self.logger.debug(f'in_liberation')
-            if not self.should_end_liberation():
-                if not self.liberation2:
-                    self.logger.debug(f'other nightfall')
-                    self.nightfall_combo()
-            if self.in_liberation and self.liberation2 and self.click_liber2():
-                return
+            if self.should_end_liberation():
+                if self.in_liberation and self.click_liber2():
+                    return
+            else:
+                self.logger.debug(f'other nightfall')
+                self.nightfall_combo()
             return self.switch_next_char()
-        
+
         if self.is_crisis_active:
-            while self.crisis_time_left() > 0:
-                self.check_combat()
-                self.click()
-                self.task.next_frame()
+            if self.total_time_elapsed_accounting_for_freeze(self.normal_resonance_time) < 5:
+                while self.crisis_time_left() > 0:
+                    self.check_combat()
+                    self.click()
+                    self.task.next_frame()
+            else:
+                self.wait_resonance_not_gray()
             self.is_crisis_active = False
-            if not self.liberation_allowed and self.liberation_available():
-                self.liberation_allowed = True
+            if self.liberation_available():
+                if self.is_prepared() or self.is_phoebe_complete():
+                    self.liberation_allowed = True
 
         if self.liberation_allowed:
             self.logger.debug(f'liberation_allowed')
@@ -67,7 +73,6 @@ class Zani(BaseChar):
             if self.click_liberation():
                 self.in_liberation = True
                 self.first_nightfall = True
-                self.liberation2 = False
                 self.liberaction_time = time.time()
                 self.check_liber()
                 self.continues_right_click(0.1)
@@ -80,31 +85,23 @@ class Zani(BaseChar):
                 self.nightfall_combo()
                 return self.switch_next_char()
 
-        if self.echo_available():
-            self.click_echo()
-
-        if (self.get_zani_blazes() < self.blaze_threshold
-            and not self.is_phoebe_complete()
-        ):
-            self.logger.debug(f'blazes not enough')
+        if self.is_prepared() or self.is_phoebe_complete():
+            if self.liberation_available():
+                self.crisis_response_protocol_combo()
+                self.liberation_allowed = True
+            else:
+                self.crisis_response_protocol_combo()
+                if self.liberation_available():
+                    self.liberation_allowed = True
+            return self.switch_next_char()
+        
+        if not self.is_phoebe_complete():
             if not self.standard_defense_protocol_combo():
                 self.continues_normal_attack(0.1)
             if self.current_liberation() == 0 and self.is_forte_full():
-                self.click_resonance()
+                self.crisis_response_protocol_combo()
             return self.switch_next_char()
 
-        if ((self.get_zani_blazes() >= self.blaze_threshold 
-            and not self.in_liberation)
-            or self.is_phoebe_complete()
-        ):
-            if self.liberation_available():
-                self.crisis_response_protocol_combo()
-            else:
-                self.logger.debug(f'everything is set but no liberation')
-                self.crisis_response_protocol_combo(liberation_after_crisis=False)
-            return self.switch_next_char()
-        
-        self.continues_normal_attack(1)
         self.switch_next_char()          
 
     def is_phoebe_complete(self):
@@ -114,28 +111,31 @@ class Zani(BaseChar):
                 return True
         return False
 
+    def is_prepared(self):
+        if self.get_zani_blazes() >= self.blaze_threshold:
+            return True
+        return False
+    
     def standard_defense_protocol_combo(self):
         if self.is_forte_full():
             return False
         if self.resonance_available():
             self.send_resonance_key()
+            self.normal_resonance_time = time.time()
             self.sleep(0.1)
             self.continues_normal_attack(0.1)
             return True
         return False
     
-    def crisis_response_protocol_combo(self, liberation_after_crisis=True):
+    def crisis_response_protocol_combo(self):
         self.logger.debug(f'perform crisis_response_protocol')
         if not self.is_forte_full():
-            if self.resonance_available():
-                self.send_resonance_key()
-                self.sleep(0.1)
-                self.continues_normal_attack(0.1)
-            else:
+            if not self.standard_defense_protocol_combo():
                 self.heavy_attack(duration=0.6)
                 self.sleep(0.55)
                 self.continues_normal_attack(0.1)
-            self.sleep(1.2)
+            if not self.is_forte_full():
+                self.sleep(1.2)
             self.click()
             start = time.time()
             while time.time() - start < 1.9:
@@ -143,24 +143,15 @@ class Zani(BaseChar):
                     break
                 self.check_combat()
                 self.task.next_frame()
-            start = time.time()
-            while not self.is_forte_full():
-                self.check_combat()
-                self.click()
-                self.task.next_frame()
-        self.sleep(0.1)
+            self.sleep(0.1)
         while self.is_forte_full():
             self.check_combat()
             self.send_resonance_key()
             self.task.next_frame()
-        if liberation_after_crisis:
-            self.liberation_allowed = True
-        elif self.liberation_available():
-            self.liberation_allowed = True
-
         self.crisis_time = time.time()
         self.is_crisis_active = True
     
+    #未使用
     def get_zani_forte(self):           
         box = self.task.box_of_screen_scaled(3840, 2160, 1628, 1997, 2183, 2003, name='zani_forte', hcenter=True)
         forte_percent = 0
@@ -189,13 +180,11 @@ class Zani(BaseChar):
     def should_end_liberation(self, check_forte=True):
         if self.liberation_elapsed() > 18:
             self.logger.info(f'liberation is about to end, perform liberation2')
-            self.liberation2 = True
             return True
         if check_forte:
             self.wait_resonance_not_gray()
             if not self.is_forte_full():
                 self.logger.info(f'Cannot perform another nightfall end liberation')
-                self.liberation2 = True
                 return True
         return False
         
@@ -230,7 +219,7 @@ class Zani(BaseChar):
         self.logger.debug(f'nightfall_time: {self.nightfall_time}')
         if self.nightfall_time == 0:
             return 0
-        result = 1.8 - self.all_time_elapsed_accounting_for_freeze(self.nightfall_time, intro_freeze=True)
+        result = 1.8 - self.total_time_elapsed_accounting_for_freeze(self.nightfall_time, intro_freeze=True)
         self.logger.debug(f'nightfall_time_left: {result}')
         return result
     
@@ -238,14 +227,14 @@ class Zani(BaseChar):
         #1.5
         if self.crisis_time == 0 or not self.is_crisis_active:
             return 0
-        result = 1.7 - self.all_time_elapsed_accounting_for_freeze(self.crisis_time, intro_freeze=True)
+        result = 1.7 - self.total_time_elapsed_accounting_for_freeze(self.crisis_time, intro_freeze=True)
         self.logger.debug(f'crisis_time_left: {result}')
         return result
     
     def liberation_elapsed(self):
         if not self.in_liberation or self.liberaction_time == 0:
             return -1
-        result = self.all_time_elapsed_accounting_for_freeze(self.liberaction_time)
+        result = self.total_time_elapsed_accounting_for_freeze(self.liberaction_time)
         self.logger.debug(f'liberation_lasted: {result}')
         return result
     
@@ -279,9 +268,16 @@ class Zani(BaseChar):
                 self.logger.error('wait_resonance_not_gray timed out')
 
     def on_pause_switching(self):
-        if self.liberation_elapsed() > 18:
-            self.click_liber2(switch_char=False)
-
+        if self.in_liberation:
+            if (self.resonance_available() 
+                and not self.is_forte_full()
+                or self.should_end_liberation(check_forte=False)
+            ):
+                self.click_liber2(switch_char=False)
+        elif self.resonance_available():
+            self.click_resonance()
+        self.click()
+        
     def do_get_switch_priority(self, current_char: BaseChar, has_intro=False, target_low_con=False):
         if self.in_liberation:
             if self.liberation_elapsed() > 18:
@@ -345,12 +341,6 @@ class Zani(BaseChar):
     def check_liber(self):
         if self.has_target(self.in_liberation):
             return self.in_liberation
-
-        """ if not self.in_liberation:
-            self.logger.debug("Rechecking in_liberation state")
-            self.sleep(0.1, False)
-            if self.has_target(self.in_liberation):
-                return self.in_liberation """
         self.sleep(0.1, False)
         if self.has_target(not self.in_liberation):
             self.in_liberation = not self.in_liberation
