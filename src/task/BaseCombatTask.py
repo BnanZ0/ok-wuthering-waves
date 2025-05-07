@@ -155,6 +155,8 @@ class BaseCombatTask(CombatCheck):
                 priority = char.get_switch_priority(current_char, has_intro, target_low_con)
                 logger.debug(
                     f'switch_next_char priority: {char} {priority} {char.current_con} target_low_con {target_low_con}')
+            if char.char_name == "char_shorekeeper":
+                locals()[char.char_name] = char
             if target_low_con:
                 if char.current_con < low_con and char != current_char:
                     low_con = char.current_con
@@ -179,6 +181,8 @@ class BaseCombatTask(CombatCheck):
             switch_to.has_intro = switch_to.has_intro or current_char.is_con_full()
             if now - last_click > 0.1:
                 self.send_key(switch_to.index + 1)
+                if getattr(switch_to, "has_intro_animation", False):
+                    switch_to.handle_intro_animation()
                 last_click = now
             in_team, current_index, size = self.in_team()
             if not in_team:
@@ -209,6 +213,8 @@ class BaseCombatTask(CombatCheck):
                     self.add_intro_freeze_duration(time.time())
                     if hasattr(current_char, "perform_outro_time"):
                         current_char.perform_outro_time = time.time()
+                if has_intro and "char_shorekeeper" in locals():
+                    locals()["char_shorekeeper"].add_liberation_level()
                 break
 
         if post_action:
