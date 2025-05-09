@@ -13,6 +13,8 @@ class ShoreKeeper(Healer):
         self.has_intro_animation = False
         self.fast_con_combo_count = 0
 
+        self.released_outro_this_liberation = False
+
     def reset_state(self):
         super().reset_state()
         self.liberation_time = 0
@@ -33,32 +35,69 @@ class ShoreKeeper(Healer):
                 self.logger.info(
                     f'switch priority MAX because liberation is about to end. Remain:{self.liberation_time_left()}s')
                 self.has_intro_animation = True
-                return Priority.MAX + 1
+                return Priority.MAX
             elif self.liberation_time_left() > 8:
                 return Priority.MIN
             else:
                 return super().do_get_switch_priority(current_char, has_intro)
+        elif self.liberation_level < 3 and not self.released_outro_this_liberation:
+            return Priority.SKILL_AVAILABLE + 100
         else:
             return super().do_get_switch_priority(current_char, has_intro)
         
     def do_perform(self):
         self.liberation_time_left()
-        if self.liberation_level == 0:
-            self.fast_con_combo()
-            if self.fast_con_combo_count < 2:
-                return self.switch_next_char()
+        if self.should_cast_liberation():
+            if self.resonance_available():
+                target_con = 0.5
+            else:
+                target_con = 0.8
+            if self.get_current_con() < target_con:
+                self.fast_con_combo()
+        else:
+            if self.released_outro_this_liberation:
+                if self.get_current_con() < 0.6:
+                    if self.is_forte_full():
+                        self.heavy_attack(0.6)
+                    else:
+                        self.continues_normal_attack(1.1)
+                else:
+                    self.continues_normal_attack(0.1)
+            elif self.liberation_level < 3:
+                if self.resonance_available():
+                    self.click_resonance()
+                    self.sleep(0.1)
+                self.fast_con_combo()
+            return self.switch_next_char()
 
-        if self.liberation_available(wait_if_cd_ready=0.4):
-            if (self.liberation_level == 0 or self.liberation_time_left() < 5) and self.click_liberation():
+        if self.should_cast_liberation():
+            if self.resonance_available():
+                self.click_resonance()
+            if self.click_liberation():
                 self.liberation_level = 1
-                self.fast_con_combo_count = 0
                 self.liberation_time = time.time()
-                self.att_until_con_full()
-                
+                self.released_outro_this_liberation = False
+        if self.is_forte_full():
+            self.heavy_attack(0.6)
         self.continues_normal_attack(0.1)
         self.switch_next_char()
 
     def fast_con_combo(self):
+        result = self.continues_normal_attack(1.1)
+        if result != "CON_FULL":
+            if result != "FORTE_FULL":
+                self.sleep(0.3)
+                self.continues_right_click(0.1, direction_key='d')
+                self.sleep(0.1)
+                result = self.continues_normal_attack(1)
+            if result != "CON_FULL" and (result == "FORTE_FULL" or self.is_forte_full()):
+                self.heavy_attack(0.6)
+                self.sleep(0.1)
+
+    def should_cast_liberation(self):
+        return self.liberation_level == 0 or self.liberation_time_left() < 5
+    #未使用
+    def fast_con_combo2(self):
         self.fast_con_combo_count += 1
         if self.fast_con_combo_count < 2:
             self.continues_normal_attack(1.1)
@@ -80,11 +119,13 @@ class ShoreKeeper(Healer):
         start = time.time()
         while time.time() - start < duration:
             if until_forte_full and self.is_forte_full():
-                return
+                return "FORTE_FULL"
             if until_con_full and self.is_con_full():
-                return
+                return "CON_FULL"
             self.task.click(interval=interval)
-
+        return "DONE"
+        
+    #未使用
     def att_until_con_full(self):
         start = time.time()
         while not self.is_con_full():
@@ -99,7 +140,7 @@ class ShoreKeeper(Healer):
             if time.time() - start > 5:
                 self.logger.debug(f'att_until_con_full timeout')
                 break
-    
+    #未使用
     def get_shorekeeper_forte(self):           
         box = self.task.box_of_screen_scaled(3840, 2160, 1628, 1987, 2183, 1993, name='shorekeeper_forte', hcenter=True)
         forte_percent = 0
@@ -112,6 +153,7 @@ class ShoreKeeper(Healer):
         start = time.time()
         animation_start = 0
         duration = 0
+        self.task.in_liberation = True
         while True:
             if time.time() - start > 6:
                 self.logger.info(f'Handle discernment too long')
@@ -123,6 +165,7 @@ class ShoreKeeper(Healer):
                     self.add_freeze_duration(animation_start, duration)
                     self.liberation_level = 0
                     self.has_intro_animation = False
+                    self.sleep(0.4)
                     break
                 elif time.time() - start > 1:
                     self.logger.info(f'Discernment fail')
@@ -135,6 +178,7 @@ class ShoreKeeper(Healer):
                     self.logger.info(f'Discernment start animation')
                     animation_start = time.time()
             self.task.next_frame()
+        self.task.in_liberation = False
 
     def liberation_time_left(self):
         if self.liberation_level != 0:
@@ -149,6 +193,11 @@ class ShoreKeeper(Healer):
         if 0 < self.liberation_level < 3:
             self.liberation_level += 1
 
+    def switch_next_char(self, *args):
+        if self.is_con_full():
+            self.released_outro_this_liberation = True
+        return super().switch_next_char(*args)
+    
 shorekeeper_forte_color = {
     'r': (240, 255),  # Red range
     'g': (240, 255),  # Green range
