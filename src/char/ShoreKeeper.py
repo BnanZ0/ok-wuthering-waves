@@ -53,14 +53,7 @@ class ShoreKeeper(Healer):
             else:
                 target_con = 0.8
             if self.get_current_con() < target_con:
-                self.continues_normal_attack(1.1)
-                self.sleep(0.3)
-                self.continues_right_click(0.1, direction_key='d')
-                self.sleep(0.1)
-                self.continues_normal_attack(0.8)
-                if self.is_forte_full():
-                    self.heavy_attack(0.6)
-                    self.sleep(0.1)
+                self.fast_con_combo()
         else:
             if self.released_outro_this_liberation:
                 if self.get_current_con() < 0.6:
@@ -74,10 +67,7 @@ class ShoreKeeper(Healer):
                 if self.resonance_available():
                     self.click_resonance()
                     self.sleep(0.1)
-                self.continues_normal_attack(1.4)
-                self.sleep(0.1)
-                if self.is_forte_full():
-                    self.heavy_attack(0.6)
+                self.fast_con_combo()
             return self.switch_next_char()
 
         if self.should_cast_liberation():
@@ -92,10 +82,20 @@ class ShoreKeeper(Healer):
         self.continues_normal_attack(0.1)
         self.switch_next_char()
 
+    def fast_con_combo(self):
+        self.continues_normal_attack(1.1)
+        self.sleep(0.3)
+        self.continues_right_click(0.1, direction_key='d')
+        self.sleep(0.1)
+        self.continues_normal_attack(1)
+        if self.is_forte_full():
+            self.heavy_attack(0.6)
+            self.sleep(0.1)
+
     def should_cast_liberation(self):
         return self.liberation_level == 0 or self.liberation_time_left() < 5
-
-    def fast_con_combo(self):
+    #未使用
+    def fast_con_combo2(self):
         self.fast_con_combo_count += 1
         if self.fast_con_combo_count < 2:
             self.continues_normal_attack(1.1)
@@ -121,7 +121,7 @@ class ShoreKeeper(Healer):
             if until_con_full and self.is_con_full():
                 return
             self.task.click(interval=interval)
-
+    #未使用
     def att_until_con_full(self):
         start = time.time()
         while not self.is_con_full():
@@ -136,7 +136,7 @@ class ShoreKeeper(Healer):
             if time.time() - start > 5:
                 self.logger.debug(f'att_until_con_full timeout')
                 break
-    
+    #未使用
     def get_shorekeeper_forte(self):           
         box = self.task.box_of_screen_scaled(3840, 2160, 1628, 1987, 2183, 1993, name='shorekeeper_forte', hcenter=True)
         forte_percent = 0
