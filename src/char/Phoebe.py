@@ -27,6 +27,7 @@ class Phoebe(BaseChar):
         self.is_action_complete = False
     
     def flying(self):
+        print(self.current_resonance(), self.current_echo())
         return self.current_resonance() == 0 or self.current_echo() == 0
 
     def do_perform(self):
@@ -35,13 +36,14 @@ class Phoebe(BaseChar):
             self.decide_teammate()
         if self.has_intro:
             self.continues_normal_attack(1.5)
+        else:
+            self.sleep(0.01)
         if self.flying():
             self.logger.info('Pheobe flying')
             self.continues_normal_attack(0.1)
             return self.switch_next_char()
-        
         if self.is_zani_ready():
-            self.logger.debug('stop applying spectro frazzle')
+            self.logger.info('stop applying spectro frazzle')
             if not self.char_zani.liberation_elapsed() > 18:
                 if self.get_current_con() < 0.5:
                     if self.resonance_available():
@@ -54,7 +56,7 @@ class Phoebe(BaseChar):
             self.absolution_or_confession()
         elif not self.in_absolution_or_confession():
             self.logger.debug('wait for UI')
-            wait_ui_time = 0.4 - (time.time() - start)
+            wait_ui_time = 0.35 - (time.time() - start)
             if wait_ui_time > 0:
                 self.continues_normal_attack(wait_ui_time)
         
@@ -106,8 +108,8 @@ class Phoebe(BaseChar):
         self.perform_heavy_attack()
         if not self.is_forte_full():
             self.starflash_combo_count += 1
-        if self.is_con_full() or self.liberation_available():
-            self.sleep(0.3)
+        """ if self.is_con_full() or self.liberation_available():
+            self.sleep(0.3) """
         return True
                 
     def perform_heavy_attack(self):
@@ -273,7 +275,7 @@ class Phoebe(BaseChar):
   
 phoebe_blue_color = {
     'r': (130, 170),  # Red range
-    'g': (205, 235),  # Green range
+    'g': (200, 235),  # Green range
     'b': (240, 255)   # Blue range
 }  
 
