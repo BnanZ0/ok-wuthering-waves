@@ -215,9 +215,8 @@ class BaseCombatTask(CombatCheck):
                 current_char.switch_out()
                 switch_to.is_current_char = True
                 if has_intro:
-                    self.add_intro_freeze_duration(time.time())
-                    if hasattr(current_char, "perform_outro_time"):
-                        current_char.perform_outro_time = time.time()
+                    self.add_intro_freeze_duration(time.time(), switch_to.intro_animation_freeze_duration)
+                    current_char.perform_outro_time = time.time()
                 if has_intro and "char_shorekeeper" in locals():
                     locals()["char_shorekeeper"].add_liberation_level()
                 break
@@ -525,9 +524,9 @@ class BaseCombatTask(CombatCheck):
 
         return the_area, is_full
 
-    def add_intro_freeze_duration(self, start, duration=1.4):
+    def add_intro_freeze_duration(self, start, duration):
         if duration < 0:
-            duration = time.time() - start
+            duration = 0.62
         if start > 0 and duration > 0.1:
             current_time = time.time()
             self.total_freeze_durations = [item for item in self.total_freeze_durations if item[0] >= current_time - 30]
@@ -538,7 +537,7 @@ class BaseCombatTask(CombatCheck):
         for freeze_start, duration, freeze_time in self.total_freeze_durations:
             if start < freeze_start:
                 if intro_freeze:
-                    to_minus += duration - (0.1 if freeze_time == -100 else freeze_time)
+                    to_minus += duration - (0 if freeze_time == -100 else freeze_time)
                 else:
                     if freeze_time == -100:
                         continue

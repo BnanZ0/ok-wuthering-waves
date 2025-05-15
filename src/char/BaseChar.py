@@ -58,6 +58,8 @@ class BaseChar:
             self.config = Config(self.name, self.config)
         self.current_con = 0
         self.has_tool_box = False
+        self.intro_animation_freeze_duration = 0.9
+        self.perform_outro_time = -1
 
     def char_config(self):
         return {}
