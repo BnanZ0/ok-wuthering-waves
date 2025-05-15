@@ -55,17 +55,17 @@ class Zani(BaseChar):
             return self.switch_next_char()
 
         if self.is_crisis_active:
-            if self.total_time_elapsed_accounting_for_freeze(self.normal_resonance_time) < 5:
-                while self.crisis_time_left() > 0:
-                    self.check_combat()
-                    self.click()
-                    self.task.next_frame()
-            else:
-                self.wait_resonance_not_gray()
+            self.wait_for_crisis_protocol_end()
             self.is_crisis_active = False
-            if not self.liberation_allowed and self.liberation_available():
-                if self.is_prepared() or self.is_phoebe_complete():
-                    self.liberation_allowed = True
+
+        if self.is_prepared() or self.is_phoebe_complete():
+            self.crisis_response_protocol_combo()
+            if self.liberation_available():
+                self.liberation_allowed = True
+                self.wait_for_crisis_protocol_end()
+                self.is_crisis_active = False
+            else:
+                return self.switch_next_char()
 
         if self.liberation_allowed:
             self.logger.debug(f'liberation_allowed')
@@ -85,20 +85,29 @@ class Zani(BaseChar):
                 self.nightfall_combo()
                 return self.switch_next_char()
                     
-        if self.is_prepared() or self.is_phoebe_complete():
+        """ if self.is_prepared() or self.is_phoebe_complete():
             self.crisis_response_protocol_combo()
             if self.liberation_available():
                 self.liberation_allowed = True
-            return self.switch_next_char()
+            return self.switch_next_char() """
         
         if not self.is_phoebe_complete():
             if not self.standard_defense_protocol_combo():
                 self.continues_normal_attack(0.1)
-            if self.current_liberation() == 0 and self.is_forte_full():
+            if not self.liberation_available() and self.is_forte_full():
                 self.crisis_response_protocol_combo()
             return self.switch_next_char()
 
-        self.switch_next_char()          
+        self.switch_next_char() 
+
+    def wait_for_crisis_protocol_end(self):
+        if self.total_time_elapsed_accounting_for_freeze(self.normal_resonance_time) < 5:
+            while self.crisis_time_left() > 0:
+                self.check_combat()
+                self.click()
+                self.task.next_frame()
+        else:
+            self.wait_resonance_not_gray()
 
     def is_phoebe_complete(self):
         if self.char_phoebe is not None:
@@ -220,9 +229,9 @@ class Zani(BaseChar):
         return result
     
     def crisis_time_left(self):
-        #1.5
-        if self.crisis_time == 0 or not self.is_crisis_active:
+        if not self.is_crisis_active:
             return 0
+        #1.5秒
         result = 1.7 - self.total_time_elapsed_accounting_for_freeze(self.crisis_time, intro_freeze=True)
         self.logger.debug(f'crisis_time_left: {result}')
         return result
@@ -278,17 +287,7 @@ class Zani(BaseChar):
         if self.in_liberation:
             if self.liberation_elapsed() > 18:
                 return Priority.MAX
-            if has_intro and self.nightfall_time_left() > 0:
-                self.logger.debug(f'zani_intro_wait_for_nightfall')
-                condition = lambda: self.nightfall_time_left() > 0
-                self.handle_pause_switching(current_char, condition)
             return 10000
-        elif self.liberation_allowed:
-            if has_intro:
-                self.logger.debug(f'zani_intro_wait_for_crisis')
-                condition = lambda: self.crisis_time_left() > 0
-                self.handle_pause_switching(current_char, condition)
-            return Priority.MAX
         else:
             return super().do_get_switch_priority(current_char, has_intro)
         
@@ -359,6 +358,22 @@ class Zani(BaseChar):
         white_percent = self.task.calculate_color_percentage(forte_white_color, box)
         self.logger.debug(f'forte_white_percent {white_percent}')
         return white_percent > 0.28   
+    
+    def should_pause_switch(self):
+        if self.has_intro and self.crisis_time_left() > 0:
+            return True
+        return False
+    
+    def on_pause_switch(self):
+        if self.in_liberation:
+            if (self.resonance_available() 
+                and not self.is_forte_full()
+                or self.should_end_liberation(check_forte=False)
+            ):
+                self.click_liber2(switch_char=False)
+        elif self.resonance_available():
+            self.click_resonance()
+        self.click()
         
 zani_light_color = {
     'r': (240, 255),  # Red range
