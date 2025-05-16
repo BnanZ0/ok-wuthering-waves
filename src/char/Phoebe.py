@@ -13,6 +13,10 @@ class Phoebe(BaseChar):
         self.star_available = False
         self._heavy_attack = True
         self.last_holding = 0
+        self.char_zani = None
+        self.has_entered_state = False
+        self.starflash_exhausted = False
+        self.is_action_complete = False
         
     def reset_state(self):
         super().reset_state()
@@ -21,24 +25,52 @@ class Phoebe(BaseChar):
         self.attribute = 0
         self.star_available = False
         self._heavy_attack = True
+        self.char_zani = None
+        self.is_action_complete = False
+        self.starflash_exhausted = False
         
     def flying(self):
         return self.current_resonance() == 0 or self.current_echo() == 0
 
     def do_perform(self):
+        start = time.time()
         if self.attribute == 0:
             self.decide_teammate()
         if self.has_intro:
-            self.continues_normal_attack(0.8)
-            if self.heavy_attack_ready():
-                self.perform_heavy_attack(0.8)
-                return self.switch_next_char()
+            if not self.is_zani_active():
+                self.continues_normal_attack(0.8)
+                if self.heavy_attack_ready():
+                    self.perform_heavy_attack(0.8)
+                    return self.switch_next_char()
+            else:
+                self.continues_normal_attack(1.5)
+        else:
+            self.sleep(0.01)
+
         if self.attribute == 1:
             self.click_echo()
         if self.flying():
             self.logger.info('Pheobe flying')
             self.continues_normal_attack(0.1)
             return self.switch_next_char()
+        
+        if self.is_zani_active():
+            self.logger.info('stop applying spectro frazzle')
+            if not self.char_zani.liberation_elapsed() > 18.3:
+                if self.get_current_con() < 0.5:
+                    if self.resonance_available():
+                        self.click_resonance_once()
+                    else:
+                        self.continues_normal_attack(1.4)
+                else:
+                    self.continues_normal_attack(0.1)
+            return self.switch_next_char()
+        
+        self.logger.debug('wait for UI')
+        wait_ui_time = 0.35 - (time.time() - start)
+        if wait_ui_time > 0:
+            self.continues_normal_attack(wait_ui_time)
+
         if self.liberation_available() and self.first_liberation:
             self.click_liberation()
             self.sleep(0.2)
@@ -49,10 +81,34 @@ class Phoebe(BaseChar):
             return self.switch_next_char()
         if self.judge_forte() > 0:
             self.starflash_combo()  
-        if self.attribute==2 and self.click_echo():
-            return self.switch_next_char()
         self.continues_normal_attack(0.1)
         self.switch_next_char()
+
+    def update_current_status(self):
+        if self.attribute != 2:
+            return
+        if self.has_entered_state and self.judge_forte() == 0:
+            self.has_entered_state = False
+            self.starflash_exhausted = True
+
+        if (self.star_available 
+            and self.starflash_exhausted
+            and not self.liberation_available()
+        ):
+            self.is_action_complete = True
+        else:
+            self.is_action_complete = False
+        self.logger.debug(f'star_available: {self.star_available}')
+        self.logger.debug(f'starflash_exhausted: {self.starflash_exhausted}')
+        self.logger.debug(f'is_action_complete: {self.is_action_complete}')
+
+    def is_zani_active(self):
+        if self.attribute == 2 and self.char_zani is not None:
+            if (self.char_zani.in_liberation
+                or self.char_zani.blazes >= self.char_zani.blazes_threshold
+            ):
+                return True
+        return False
 
     def judge_forte(self):
         box = self.task.box_of_screen_scaled(3840, 2160, 1633, 2004, 2160, 2014, name='phoebe_forte1', hcenter=True)
@@ -85,11 +141,18 @@ class Phoebe(BaseChar):
         return True
                 
     def perform_heavy_attack(self, duration=0.6):    
-        if self.attribute == 2 and (self.litany_ready() or self.judge_forte() == 0 or not self.check_middle_star()):
+        do_action = False
+        if self.litany_ready() or self.judge_forte() == 0 or not self.check_middle_star():
+            self.has_entered_state = True
+            self.starflash_exhausted = False
+            do_action = True
+        if self.attribute == 2 and do_action:
             self.hold_resonance(duration=duration)
             self.last_holding = time.time()
         else:
             self.heavy_attack(duration=duration)
+        if do_action:
+            self.continues_right_click(0.1)
         self._heavy_attack = False
 
     def click_resonance_once(self):
@@ -133,7 +196,10 @@ class Phoebe(BaseChar):
         return True
         
     def switch_next_char(self, *args):
+        self.update_current_status()
         if self.is_con_full():
+            if self.attribute == 2:
+                self.click_echo()
             self.perform_intro = time.time()
         self.heavy_attack_ready()
         
@@ -166,6 +232,7 @@ class Phoebe(BaseChar):
             self.logger.debug(f'phoebe teammate char: {char.char_name}')
             if char.char_name == 'char_zani':
                 self.logger.debug(f'phoebe set attribute: support')
+                self.char_zani = self.task.chars[i]
                 self.attribute = 2
                 return
         self.logger.debug(f'phoebe set attribute: attacker')
