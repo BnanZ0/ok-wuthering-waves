@@ -238,6 +238,7 @@ class Phoebe(BaseChar):
               and self.char_zani is not None 
               and not self.char_zani.in_liberation
               and isinstance(current_char, Healer)
+              and has_intro
             ):
             # 吃奶的延奏
             return Priority.MAX -1
