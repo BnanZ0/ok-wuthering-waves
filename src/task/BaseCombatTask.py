@@ -493,7 +493,7 @@ class BaseCombatTask(CombatCheck):
             # All conditions met, likely a close ring.
             return True
 
-        output_image = image.copy()
+        #output_image = image.copy()
         # Iterate over each component
         ring_count = 0
         is_full = False
@@ -502,9 +502,9 @@ class BaseCombatTask(CombatCheck):
             x, y, width, height, area = stats[label, :5]
             bounding_box_area = width * height
             component_mask = (labels == label).astype(np.uint8) * 255
-            color = colors[label % len(colors)]
-            mask = labels == label
-            output_image[mask] = color
+            # color = colors[label % len(colors)]
+            # mask = labels == label
+            # output_image[mask] = color
             if bounding_box_area >= min_area:
                 # Select a color from the list based on the label index
                 if is_full_ring(component_mask):
@@ -516,8 +516,6 @@ class BaseCombatTask(CombatCheck):
         # cv2.imwrite(fr'D:\vscode\img\ring_count\count_rings_{is_full}_{self.screen_width}_mask.png', output_image)
         # cv2.imwrite(fr'D:\vscode\img\ring_count\count_rings_{is_full}_{self.screen_width}.png', image_fixed)
         if ring_count > 1:
-            cv2.imwrite(rf'D:\vscode\img\ring_count\{self.__class__.__name__}_ring_count_{ring_count}_mask.png', output_image)
-            cv2.imwrite(rf'D:\vscode\img\ring_count\{self.__class__.__name__}_ring_count_{ring_count}.png', image)
             is_full = False
             the_area = 0
             self.logger.warning(f'is_con_full found multiple rings {ring_count}')
