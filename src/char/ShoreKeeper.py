@@ -39,7 +39,7 @@ class ShoreKeeper(Healer):
                 return Priority.MIN
             """ elif 4 <= self.liberation_time_left() <= 8:
                 return Priority.MAX - 1 """
-        elif self.liberation_level < 3 and not self.released_outro_this_liberation:
+        elif self.liberation_level < 3 and not self.released_outro_this_liberation or self.should_cast_liberation():
             return Priority.SKILL_AVAILABLE + 100
         return super().do_get_switch_priority(current_char, has_intro)
         
