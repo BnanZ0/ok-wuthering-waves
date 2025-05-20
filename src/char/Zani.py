@@ -1,7 +1,7 @@
 import time
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_UP
 
-from src.char.BaseChar import BaseChar, Priority, forte_white_color
+from src.char.BaseChar import BaseChar, Priority, forte_white_color, text_white_color
 from src.combat.CombatCheck import aim_color
 
 class Zani(BaseChar):
@@ -24,9 +24,10 @@ class Zani(BaseChar):
         self.state = 0
         super().reset_state()
 
-    def count_resonance_priority(self):
-        return 5
-        
+    def current_attack(self):
+        box = self.task.box_of_screen_scaled(3840, 2160, 2709, 1894, 2827, 1972, name='box_attack', hcenter=True)
+        return self.task.calculate_color_percentage(text_white_color, box)
+    
     def do_perform(self): 
         if self.blazes_threshold == -1:
             self.decide_teammate()
@@ -48,7 +49,7 @@ class Zani(BaseChar):
 
         cast_liberation = False
         if self.crisis_time > 0:
-            self.wait_for_crisis_protocol_end()
+            self.wait_crisis_protocol_end()
             if self.crisis_time_left() > - 1 and self.liberation_available():
                 cast_liberation = True
             self.crisis_time = - 1
@@ -57,23 +58,24 @@ class Zani(BaseChar):
             self.logger.info(f'ready')
             if not self.has_cd('liberation'):
                 self.logger.info(f'liberation no cd')
-                self.crisis_response_protocol_combo()
-                if self.liberation_available():
-                    cast_liberation = True
-                    if self.blazes != 1:
-                        self.wait_for_crisis_protocol_end()
-                    self.crisis_time = - 1
-                else:
-                    return self.switch_next_char()
+                if self.crisis_response_protocol_combo():
+                    cast_liberation = self.liberation_available()
             else:
                 if self.standard_defense_protocol_combo():
-                    if not self.wait_until_forte_full(1.2):
+                    if not self.wait_forte_full(1.2):
                         self.click()
+                    cast_liberation = self.liberation_available()
                 else:
                     if self.is_forte_full():
-                        self.crisis_response_protocol_combo()
+                        if self.crisis_response_protocol_combo():
+                            cast_liberation = self.liberation_available()
                     else:
                         self.continues_normal_attack(0.1)
+            if cast_liberation:
+                if self.blazes != 1:
+                    self.wait_crisis_protocol_end()
+                self.crisis_time = - 1
+            else:
                 return self.switch_next_char()
 
         if cast_liberation:
@@ -91,19 +93,18 @@ class Zani(BaseChar):
         
         if not self.is_phoebe_complete():
             self.logger.info(f'last operation')
-            if (self.current_liberation() == 0 
-                and not self.has_cd('liberation') 
-            ):
-                self.logger.info(f'gain forte')
-                if self.standard_defense_protocol_combo():
-                    if not self.wait_until_forte_full(1.2):
+            if not self.standard_defense_protocol_combo():
+                if (self.current_liberation() == 0 
+                    and not self.has_cd('liberation') 
+                ):
+                    self.logger.info(f'gain forte')
+                    if not self.wait_forte_full(1.2):
                         self.click()
-                if self.is_forte_full():
-                    self.crisis_response_protocol_combo()
-            else:
-                self.logger.info(f'do something')
-                if not self.standard_defense_protocol_combo():
+                else:
+                    self.logger.info(f'do something')
                     self.continues_normal_attack(0.1)
+            if self.is_forte_full():
+                self.crisis_response_protocol_combo()
         self.switch_next_char()          
 
     def click_liber2(self, switch_char=True):
@@ -111,6 +112,7 @@ class Zani(BaseChar):
             start = time.time()
             self.check_liber()
             if self.in_liberation:
+                self.task.wait_until(lambda: self.current_attack() != 0, time_out=1, settle_time=0.1)
                 self.send_liberation_key()
                 self.task.in_liberation = True
                 if switch_char:
@@ -206,24 +208,24 @@ class Zani(BaseChar):
         if not self.is_forte_full():
             for _ in range(2):
                 if not self.standard_defense_protocol_combo():
-                    self.heavy_attack(duration=0.6)
-                    self.sleep(0.55)
+                    self.task.mouse_down()
+                    if self.wait_forte_full(0.6):
+                        break
+                    self.task.mouse_up()
+                    if self.wait_forte_full(0.55):
+                        break
                     self.continues_normal_attack(0.1)
-                if self.wait_until_forte_full(1.2):
+                if self.wait_forte_full(1.2):
                     break
                 self.click()
-                if self.wait_until_forte_full(1.9):
+                if self.wait_forte_full(1.9):
                     break
                 else:
                     self.continues_right_click(0.1)
                     self.sleep(0.1)
-                if self.is_forte_full():
-                    break
             else:
-                while not self.is_forte_full():
-                    self.click()
-                    self.check_combat()
-                    self.task.next_frame()
+                if not self.is_forte_full():
+                    return False
         while True:
             self.check_combat()
             self.send_resonance_key()
@@ -231,26 +233,16 @@ class Zani(BaseChar):
                 break
             self.task.next_frame()
         self.crisis_time = time.time()
+        return True
 
-    def wait_until_forte_full(self, timeout=1):
-        start = time.time()
-        while time.time() - start < timeout:
-            if self.is_forte_full():
-                return True
-            self.check_combat()
-            self.task.next_frame()
-        return False
+    def wait_forte_full(self, timeout=1):
+        result = self.task.wait_until(self.is_forte_full, post_action=self.check_combat, time_out=timeout, settle_time=0.1)
+        return result
     
     def is_forte_full(self):
         box = self.task.box_of_screen_scaled(3840, 2160, 2284, 1992, 2311, 2019, name='forte_full', hcenter=True)
-        n = 2
-        for i in range(n):
-            white_percent = self.task.calculate_color_percentage(forte_white_color, box)
-            self.logger.debug(f'forte_color_percent {white_percent}')
-            if white_percent < 0.12:
-                break
-            if i < n - 1:
-                self.sleep(0.1)
+        white_percent = self.task.calculate_color_percentage(forte_white_color, box)
+        self.logger.debug(f'forte_color_percent {white_percent}')
         return white_percent > 0.12
 
     def crisis_time_left(self):
@@ -260,12 +252,12 @@ class Zani(BaseChar):
         self.logger.debug(f'crisis_time_left: {result}')
         return result
     
-    def wait_for_crisis_protocol_end(self):
+    def wait_crisis_protocol_end(self):
+        def post_action_fn():
+            self.click_with_interval()
+            self.check_combat()
         if self.normal_resonance_time > 0 and self.total_time_elapsed_accounting_for_freeze(self.normal_resonance_time) < 5:
-            while self.crisis_time_left() > 0:
-                self.check_combat()
-                self.click()
-                self.task.next_frame()
+            self.task.wait_until(lambda: self.crisis_time_left() <= 0, post_action=post_action_fn, time_out=2)
         else:
             self.normal_resonance_time = -1
             self.wait_resonance_not_gray()
@@ -278,13 +270,13 @@ class Zani(BaseChar):
                 self.char_phoebe = char
                 self.blazes_threshold = 0.4
                 return
-        self.blazes_threshold = 0.69
+        self.blazes_threshold = 0.4
         return 
     
     def update_blazes(self):
         box = self.task.box_of_screen_scaled(3840, 2160, 1627, 2014, 2176, 2017, name='zani_blazes', hcenter=True)
         blazes_percent = self.task.calculate_color_percentage(zani_blazes_color, box)
-        blazes_percent = Decimal(str(blazes_percent)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        blazes_percent = Decimal(str(blazes_percent)).quantize(Decimal('0.01'), rounding=ROUND_UP)
         self.blazes = blazes_percent
         self.logger.debug(f'blazes_percent {blazes_percent}')
     
@@ -295,13 +287,10 @@ class Zani(BaseChar):
         return False
 
     def wait_resonance_not_gray(self, timeout=5):
-        start = time.time()
-        while self.current_resonance() == 0 or self.has_cd('resonance'):
+        def post_action_fn():
+            self.click_with_interval()
             self.check_combat()
-            self.click()
-            self.task.next_frame()
-            if time.time() - start > timeout:
-                self.logger.error('wait_resonance_not_gray timed out')
+        self.task.wait_until(lambda: self.current_resonance() != 0, post_action=post_action_fn, time_out=timeout)
 
     def do_get_switch_priority(self, current_char: BaseChar, has_intro=False, target_low_con=False):
         if self.in_liberation:
@@ -348,7 +337,6 @@ class Zani(BaseChar):
     def is_phoebe_complete(self):
         if self.char_phoebe is not None:
             if self.get_state() == 2:
-                self.state = 0
                 self.char_phoebe.reset_action()
             return self.char_phoebe.is_action_complete()
     

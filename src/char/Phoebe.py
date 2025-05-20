@@ -48,21 +48,20 @@ class Phoebe(BaseChar):
             self.continues_normal_attack(0.1)
             return self.switch_next_char()
         
-        if self.is_action_complete():
-            result = self.get_zani_state()
-            if result == 1:
-                self.logger.info('stop applying spectro frazzle')
-                if not self.char_zani.liberation_time_left() < 1.7:
-                    if self.resonance_available():
-                        self.click_resonance(send_click=False)
-                    else:
-                        self.continues_normal_attack(1)
-                return self.switch_next_char()
-            elif result == 2:
-                self.char_zani.state = 0
-                self.reset_action()
-        else:
-            if (self.state["starflash_combo"] >= 2
+        if self.attribute == 2 and self.char_zani is not None:
+            if self.is_action_complete():
+                result = self.get_zani_state()
+                if result == 1:
+                    self.logger.info('stop applying spectro frazzle')
+                    if not self.char_zani.liberation_time_left() < 1.7:
+                        if self.resonance_available():
+                            self.click_resonance(send_click=False)
+                        else:
+                            self.continues_normal_attack(1)
+                    return self.switch_next_char()
+                elif result == 2:
+                    self.reset_action()
+            elif (self.state["starflash_combo"] >= 2
                 and self.state["liberation"] == 0 
                 and self.liberation_available() 
                 and self.click_liberation(send_click=False)
@@ -91,10 +90,6 @@ class Phoebe(BaseChar):
             return self.switch_next_char()
         self.continues_normal_attack(0.1)
         self.switch_next_char()
-  
-    def reset_action(self):
-        self.state["liberation"] = 0
-        self.state["starflash_combo"] = 0
 
     def judge_forte(self):
         box = self.task.box_of_screen_scaled(3840, 2160, 1633, 2004, 2160, 2014, name='phoebe_forte1', hcenter=True)
@@ -161,7 +156,7 @@ class Phoebe(BaseChar):
     def absolution_or_confession(self):
         self.task.wait_in_team_and_world(time_out=3, raise_if_not_found=False)
         condition = lambda: False
-        if not self.star_available and not self.check_middle_star():
+        if not self.check_middle_star():
             condition = lambda: self.is_forte_full()
         elif self.confession_ready() and self.judge_forte() == 0:
             condition = lambda: self.confession_ready()
@@ -200,10 +195,11 @@ class Phoebe(BaseChar):
         return super().switch_next_char(*args)
         
     def do_get_switch_priority(self, current_char: BaseChar, has_intro=False, target_low_con=False):
-        if self.attribute == 2 and self.get_zani_state() == 1 and not self.is_action_complete():
-            return 10000
-        if self.attribute == 2 and self.get_zani_state() == 2 and isinstance(current_char, Healer):
-            return 10000
+        if self.attribute == 2:
+            if self.get_zani_state() == 1 and not self.is_action_complete():
+                return 10000
+            if self.get_zani_state() == 2 and isinstance(current_char, Healer):
+                return 10000
         if self.total_time_elapsed_accounting_for_freeze(self.perform_intro, intro_freeze=True) < 4.5:
             return Priority.MIN + 1
         else:
@@ -299,6 +295,13 @@ class Phoebe(BaseChar):
         if self.is_current_char and not self.liberation_available() and self.judge_forte() == 0 and not self.confession_ready():
             return True
         return False
+    
+    def reset_action(self):
+        if self.attribute == 2:
+            self.state["liberation"] = 0
+            self.state["starflash_combo"] = 0
+            if self.char_zani is not None:
+                self.char_zani.state = 0
 
 phoebe_blue_color = {
     'r': (130, 170),  # Red range
