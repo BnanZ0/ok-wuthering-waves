@@ -179,7 +179,7 @@ class Phoebe(BaseChar):
             else:
                 self.task.mouse_up()
                 self.logger.info(f'Enters absolution status')
-            self.continues_right_click(0.1)
+            self.continues_right_click(0.05)
             return True
         return False
                     
@@ -298,6 +298,7 @@ class Phoebe(BaseChar):
     
     def reset_action(self):
         if self.attribute == 2:
+            self.logger.info(f'reset action')
             self.state["liberation"] = 0
             self.state["starflash_combo"] = 0
             if self.char_zani is not None:

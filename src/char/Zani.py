@@ -7,7 +7,7 @@ from src.combat.CombatCheck import aim_color
 class Zani(BaseChar):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.intro_motion_freeze_duration = 1.4
+        self.intro_motion_freeze_duration = 1.42
         self.liberation_time = 0
         self.in_liberation = False
         self.blazes = -1
@@ -64,7 +64,12 @@ class Zani(BaseChar):
                 if self.standard_defense_protocol_combo():
                     if not self.wait_forte_full(1.2):
                         self.click()
-                    cast_liberation = self.liberation_available()
+                    if self.liberation_available():
+                        if not self.wait_forte_full(1.9):
+                            self.continues_right_click(0.1)
+                            self.sleep(0.1)
+                        if self.crisis_response_protocol_combo():
+                            cast_liberation = True
                 else:
                     if self.is_forte_full():
                         if self.crisis_response_protocol_combo():
@@ -108,12 +113,12 @@ class Zani(BaseChar):
         self.switch_next_char()          
 
     def click_liber2(self, switch_char=True):
-        if self.liberation_available():   
+        if self.current_liberation() != 0:   
             start = time.time()
             self.check_liber()
             if self.in_liberation:
-                self.task.wait_until(lambda: self.current_attack() != 0, time_out=1, settle_time=0.1)
-                self.send_liberation_key()
+                while time.time() - start < 0.15:
+                    self.send_liberation_key()
                 self.task.in_liberation = True
                 if switch_char:
                     self.switch_next_char()
@@ -183,7 +188,7 @@ class Zani(BaseChar):
     def nightfall_time_left(self):
         if self.nightfall_time <= 0:
             return 0
-        result = 2.1 - self.total_time_elapsed_accounting_for_freeze(self.nightfall_time, intro_freeze=True)
+        result = 2.2 - self.total_time_elapsed_accounting_for_freeze(self.nightfall_time, intro_freeze=True)
         if self.nightfall_time <= 0:
             self.nightfall_time = -1
             return 0
@@ -191,10 +196,10 @@ class Zani(BaseChar):
         return result
     
     def standard_defense_protocol_combo(self):
-        self.logger.debug(f'perform standard_defense_protocol')
         if self.is_forte_full():
             return False
         if self.resonance_available():
+            self.logger.info(f'perform standard_defense_protocol')
             self.update_res_cd()
             self.send_resonance_key()
             self.normal_resonance_time = time.time()
@@ -226,18 +231,30 @@ class Zani(BaseChar):
             else:
                 if not self.is_forte_full():
                     return False
-        while True:
-            self.check_combat()
+        def post_action_fn():
             self.send_resonance_key()
-            if not self.is_forte_full():
-                break
-            self.task.next_frame()
+            self.check_combat()
+        self.task.wait_until(lambda: not self.is_forte_full(), post_action=post_action_fn, time_out=1)
         self.crisis_time = time.time()
         return True
 
-    def wait_forte_full(self, timeout=1):
-        result = self.task.wait_until(self.is_forte_full, post_action=self.check_combat, time_out=timeout, settle_time=0.1)
-        return result
+    def wait_forte_full(self, timeout=1, settle_time=0.1):
+        return self.wait_until(self.is_forte_full, timeout, settle_time)
+    
+    def wait_until(self, condition: callable, time_out: float=0.1, settle_time: float=0):
+        start = time.time()
+        stable_start = None
+        while time.time() - start < time_out:
+            if condition():
+                if stable_start is None:
+                    stable_start = time.time()
+                elif time.time() - stable_start >= settle_time:
+                    return True
+            else:
+                stable_start = None
+            self.check_combat()
+            self.task.next_frame()
+        return False
     
     def is_forte_full(self):
         box = self.task.box_of_screen_scaled(3840, 2160, 2284, 1992, 2311, 2019, name='forte_full', hcenter=True)
@@ -263,7 +280,6 @@ class Zani(BaseChar):
             self.wait_resonance_not_gray()
 
     def decide_teammate(self):
-        # 满焰光: 1.0, 菲比一套: 0.95, 菲比一套(排除1点光燥): 0.90, 参考b站视频光主一套 0.69
         for _, char in enumerate(self.task.chars):
             self.logger.debug(f'zani teammate char: {char.char_name}')
             if char.char_name == 'char_phoebe':
