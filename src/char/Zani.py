@@ -38,15 +38,16 @@ class Zani(BaseChar):
             self.click_echo()
 
         if self.in_liberation:
-            while True:
-                self.logger.info(f'in liberation')
+            self.logger.info(f'in liberation')
+            while self.liberation_time_left() > 0:
                 if self.should_end_liberation():
                     if self.click_liber2():
                         self.state = 2
-                        return
+                        break
                 else:
                     self.nightfall_combo()
                     self.wait_resonance_not_gray()
+            return
 
         cast_liberation = False
         if self.crisis_time > 0:
@@ -117,7 +118,6 @@ class Zani(BaseChar):
         if self.current_liberation() != 0:   
             self.task.wait_until(lambda: self.current_attack() != 0, time_out=1)
             start = time.time()
-            self.check_liber()
             if self.in_liberation:
                 while time.time() - start < 0.15:
                     self.send_liberation_key()
@@ -137,7 +137,7 @@ class Zani(BaseChar):
     def should_end_liberation(self, check_forte=True):
         result = self.total_time_elapsed_accounting_for_freeze(self.liberation_time)
         self.logger.debug(f'liberation_lasted: {result}')
-        if self.liberation_time_left() < 2:
+        if self.liberation_time_left() < 1.7:
             self.logger.info(f'liberation is about to end, perform liberation2')
             return True
         if self.is_nightfall_ready():
@@ -219,9 +219,7 @@ class Zani(BaseChar):
                     if self.wait_forte_full(0.6):
                         break
                     self.task.mouse_up()
-                    if self.wait_forte_full(0.55):
-                        break
-                    self.continues_normal_attack(0.1)
+                    self.wait_until(self.is_forte_full, post_action=self.click_with_interval, time_out=0.65, settle_time=0.1)
                 if self.wait_forte_full(1.2):
                     break
                 self.click()
@@ -241,9 +239,9 @@ class Zani(BaseChar):
         return True
 
     def wait_forte_full(self, timeout=1, settle_time=0.1):
-        return self.wait_until(self.is_forte_full, timeout, settle_time)
+        return self.wait_until(self.is_forte_full, time_out=timeout, settle_time=settle_time)
     
-    def wait_until(self, condition: callable, time_out: float=0.1, settle_time: float=0):
+    def wait_until(self, condition: callable, post_action: callable = lambda: None, time_out: float=0.1, settle_time: float=0):
         start = time.time()
         stable_start = None
         while time.time() - start < time_out:
@@ -254,6 +252,7 @@ class Zani(BaseChar):
                     return True
             else:
                 stable_start = None
+            post_action()
             self.check_combat()
             self.task.next_frame()
         return False
@@ -312,7 +311,7 @@ class Zani(BaseChar):
 
     def do_get_switch_priority(self, current_char: BaseChar, has_intro=False, target_low_con=False):
         if self.in_liberation:
-            if self.liberation_time_left() < 2:
+            if self.liberation_time_left() < 1.7:
                 return Priority.MAX
             elif has_intro and self.nightfall_time_left() > 0:
                 self.logger.info(f'has_intro {has_intro}, wait nightfall end')
