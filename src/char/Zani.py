@@ -38,14 +38,15 @@ class Zani(BaseChar):
             self.click_echo()
 
         if self.in_liberation:
-            self.logger.info(f'in liberation')
-            if self.should_end_liberation():
-                if self.click_liber2():
-                    self.state = 2
-                    return
-            else:
-                self.nightfall_combo()
-            return self.switch_next_char()
+            while True:
+                self.logger.info(f'in liberation')
+                if self.should_end_liberation():
+                    if self.click_liber2():
+                        self.state = 2
+                        return
+                else:
+                    self.nightfall_combo()
+                    self.wait_resonance_not_gray()
 
         cast_liberation = False
         if self.crisis_time > 0:
@@ -114,6 +115,7 @@ class Zani(BaseChar):
 
     def click_liber2(self, switch_char=True):
         if self.current_liberation() != 0:   
+            self.task.wait_until(lambda: self.current_attack() != 0, time_out=1)
             start = time.time()
             self.check_liber()
             if self.in_liberation:
@@ -135,7 +137,7 @@ class Zani(BaseChar):
     def should_end_liberation(self, check_forte=True):
         result = self.total_time_elapsed_accounting_for_freeze(self.liberation_time)
         self.logger.debug(f'liberation_lasted: {result}')
-        if self.liberation_time_left() < 1.7:
+        if self.liberation_time_left() < 2:
             self.logger.info(f'liberation is about to end, perform liberation2')
             return True
         if self.is_nightfall_ready():
@@ -310,11 +312,11 @@ class Zani(BaseChar):
 
     def do_get_switch_priority(self, current_char: BaseChar, has_intro=False, target_low_con=False):
         if self.in_liberation:
-            if self.liberation_time_left() < 1.7:
+            if self.liberation_time_left() < 2:
                 return Priority.MAX
             elif has_intro and self.nightfall_time_left() > 0:
                 self.logger.info(f'has_intro {has_intro}, wait nightfall end')
-                while self.nightfall_time_left() > 0:
+                while self.nightfall_time_left() > 0 and self.liberation_time_left() >= 2:
                     current_char.click()
                     self.task.next_frame()
             return 10000

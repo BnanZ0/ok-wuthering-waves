@@ -49,8 +49,8 @@ class Phoebe(BaseChar):
             return self.switch_next_char()
         
         if self.attribute == 2 and self.char_zani is not None:
+            result = self.get_zani_state()
             if self.is_action_complete():
-                result = self.get_zani_state()
                 if result == 1:
                     self.logger.info('stop applying spectro frazzle')
                     if not self.char_zani.liberation_time_left() < 1.7:
@@ -61,13 +61,17 @@ class Phoebe(BaseChar):
                     return self.switch_next_char()
                 elif result == 2:
                     self.reset_action()
-            elif (self.state["starflash_combo"] >= 2
-                and self.state["liberation"] == 0 
-                and self.liberation_available() 
-                and self.click_liberation(send_click=False)
-            ):
-                self.state["liberation"] += 1
-                self.click_resonance(send_click=False)
+            elif result == 1:
+                if self.state["liberation"] < 1:
+                    if self.liberation_available() and self.click_liberation(send_click=False):
+                        self.state["liberation"] += 1
+                if self.state["starflash_combo"] < 2:
+                    if self.judge_forte() > 0 or self.heavy_attack_ready():
+                        self.starflash_combo()  
+                if self.state["liberation"] < 1:
+                    if self.liberation_available() and self.click_liberation(send_click=False):
+                        self.state["liberation"] += 1
+                self.click_resonance_once()
                 return self.switch_next_char()
         
         wait_ui_time = 0.35 - (time.time() - start)
