@@ -19,9 +19,9 @@ class Verina(Healer):
             self.normal_attack()
             return self.switch_next_char()
         
-        do_con_full = time.time() - self.perform_outro_time >= 30
+        do_con_full = self.total_time_elapsed_accounting_for_freeze(self.perform_outro_time) >= 30
         if do_con_full:
-            if self.judge_forte() < 2:
+            if self.judge_forte() < 2 and not self.is_con_full():
                 self.continues_normal_attack(1.5)
             else:
                 self.continues_normal_attack(0.1)
@@ -32,7 +32,7 @@ class Verina(Healer):
             self.click_liberation()
         if do_con_full:
             expectation_con = self.judge_forte() * 0.125 + self.get_current_con()
-            if expectation_con >= 1:
+            if expectation_con >= 1 and not self.is_con_full():
                 #self.heavy_attack()
                 self.task.send_key('SPACE')
                 self.sleep(0.15)
