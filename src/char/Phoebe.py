@@ -129,11 +129,10 @@ class Phoebe(BaseChar):
         if not self.absolution_or_confession():
             start = time.time()
             while self.is_forte_full():
-                self.check_combat()
-                self.heavy_attack(duration=0.3)
+                self.heavy_attack(duration=0.6)
                 if time.time() - start > 2.5:
                     break
-                self.sleep(0.3)
+                self.check_combat()
 
     def click_resonance_once(self):
         start = time.time()

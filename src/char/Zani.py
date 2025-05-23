@@ -17,6 +17,7 @@ class Zani(BaseChar):
         self.nightfall_time = -1
         self.normal_resonance_time = -1
         self.state = 0
+        self.start_dodge = -1
         
     def reset_state(self):
         self.char_phoebe = None
@@ -50,11 +51,15 @@ class Zani(BaseChar):
             return
 
         cast_liberation = False
+        self.start_dodge = -1
         if self.crisis_time > 0:
             self.wait_crisis_protocol_end()
             if self.crisis_time_left() > - 1 and self.liberation_available():
                 cast_liberation = True
             self.crisis_time = - 1
+        elif not self.has_intro:
+            self.continues_right_click(0.05)
+            self.start_dodge = time.time()
 
         if not cast_liberation and (self.is_prepared() or self.is_phoebe_complete()):
             self.logger.info(f'ready')
@@ -63,6 +68,7 @@ class Zani(BaseChar):
                 if self.crisis_response_protocol_combo():
                     cast_liberation = self.liberation_available()
             else:
+                self.logger.info(f'liberation has cd')
                 if self.standard_defense_protocol_combo():
                     if not self.wait_forte_full(1.2):
                         self.click()
@@ -96,20 +102,20 @@ class Zani(BaseChar):
                 self.nightfall_combo(cancel_last_smash = True)
                 self.sleep(0.1)
                 self.nightfall_combo()
-                return self.switch_next_char()
+            return self.switch_next_char()
         
         if not self.is_phoebe_complete():
             self.logger.info(f'last operation')
-            if not self.standard_defense_protocol_combo():
+            self.crisis_response_protocol_combo()
+            if self.standard_defense_protocol_combo():
                 if (self.current_liberation() == 0 
                     and not self.has_cd('liberation') 
                 ):
-                    self.logger.info(f'gain forte')
+                    self.logger.info(f'gain liber energy')
                     if not self.wait_forte_full(1.2):
                         self.click()
-                else:
-                    self.logger.info(f'do something')
-                    self.continues_normal_attack(0.1)
+            else:
+                self.continues_normal_attack(0.1)
             if self.is_forte_full():
                 self.crisis_response_protocol_combo()
         self.switch_next_char()          
@@ -215,6 +221,9 @@ class Zani(BaseChar):
         if not self.is_forte_full():
             for _ in range(2):
                 if not self.standard_defense_protocol_combo():
+                    sleep = 0.3 - (time.time() - self.start_dodge)
+                    if self.wait_forte_full(sleep):
+                        break
                     self.task.mouse_down()
                     if self.wait_forte_full(0.6):
                         break
@@ -226,11 +235,12 @@ class Zani(BaseChar):
                 if self.wait_forte_full(1.9):
                     break
                 else:
-                    self.continues_right_click(0.1)
-                    self.sleep(0.1)
-            else:
-                if not self.is_forte_full():
-                    return False
+                    self.continues_right_click(0.05)
+                    self.start_dodge = time.time()
+                    if self.wait_forte_full(0.1):
+                        break
+            if not self.is_forte_full():
+                return False
         def post_action_fn():
             self.send_resonance_key()
             self.check_combat()
@@ -238,10 +248,12 @@ class Zani(BaseChar):
         self.crisis_time = time.time()
         return True
 
-    def wait_forte_full(self, timeout=1, settle_time=0.1):
+    def wait_forte_full(self, timeout=1, settle_time=0.15):
         return self.wait_until(self.is_forte_full, time_out=timeout, settle_time=settle_time)
     
     def wait_until(self, condition: callable, post_action: callable = lambda: None, time_out: float=0.1, settle_time: float=0):
+        if time_out < 0:
+            return False
         start = time.time()
         stable_start = None
         while time.time() - start < time_out:
@@ -266,11 +278,13 @@ class Zani(BaseChar):
     def crisis_time_left(self):
         if self.crisis_time <= 0:
             return 0
-        result = 1.8 - self.total_time_elapsed_accounting_for_freeze(self.crisis_time)
+        result = 1.7 - self.total_time_elapsed_accounting_for_freeze(self.crisis_time)
         self.logger.debug(f'crisis_time_left: {result}')
         return result
     
     def wait_crisis_protocol_end(self):
+        if self.crisis_time <= 0:
+            return
         def post_action_fn():
             self.click_with_interval()
             self.check_combat()
