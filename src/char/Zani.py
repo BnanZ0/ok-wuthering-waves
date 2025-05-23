@@ -106,7 +106,6 @@ class Zani(BaseChar):
         
         if not self.is_phoebe_complete():
             self.logger.info(f'last operation')
-            self.crisis_response_protocol_combo()
             if self.standard_defense_protocol_combo():
                 if (self.current_liberation() == 0 
                     and not self.has_cd('liberation') 
@@ -231,7 +230,7 @@ class Zani(BaseChar):
                     self.wait_until(self.is_forte_full, post_action=self.click_with_interval, time_out=0.65, settle_time=0.1)
                 if self.wait_forte_full(1.2):
                     break
-                self.click()
+                self.continues_normal_attack(0.1)
                 if self.wait_forte_full(1.9):
                     break
                 else:
