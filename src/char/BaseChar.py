@@ -118,6 +118,10 @@ class BaseChar:
     def perform(self):
         """执行当前角色的主要战斗行动序列。"""
         self.last_perform = time.time()
+        if hasattr(self, 'test') and callable(getattr(self, 'test')):
+            while True:
+                self.test()
+                self.task.next_frame()
         if self.need_fast_perform():
             self.do_fast_perform()
         else:
