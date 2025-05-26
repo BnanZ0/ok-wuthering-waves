@@ -30,6 +30,9 @@ class AutoCombatTask(BaseCombatTask, TriggerTask):
         ret = False
         if not self.scene.in_team(self.in_team_and_world):
             return ret
+        char = self.get_current_char()
+        if hasattr(char, 'test') and callable(getattr(char, 'test')):
+            char.test()
         while self.in_combat():
             ret = True
             try:
