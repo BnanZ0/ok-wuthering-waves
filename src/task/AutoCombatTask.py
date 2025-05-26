@@ -25,11 +25,22 @@ class AutoCombatTask(BaseCombatTask, TriggerTask):
             'Auto Target': 'Turn off to enable auto combat only when manually target enemy using middle click'
         }
         self.op_index = 0
+        self.test = False
 
     def run(self):
         ret = False
         if not self.scene.in_team(self.in_team_and_world):
             return ret
+        if self.test:
+            self.load_chars()
+            char = self.get_current_char()
+            if hasattr(char, 'test') and callable(getattr(char, 'test')):
+                import types
+                original_in_combat = self.in_combat
+                self.in_combat = types.MethodType(lambda _self: True, self)
+                char.test()
+                self.in_combat = original_in_combat
+        
         while self.in_combat():
             ret = True
             try:
