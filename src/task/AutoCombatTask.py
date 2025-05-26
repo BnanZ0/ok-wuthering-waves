@@ -31,6 +31,7 @@ class AutoCombatTask(BaseCombatTask, TriggerTask):
             'Switch to Healer before and after Combat': 'Better Chance to Keep Character Alive',
         }
         self.op_index = 0
+        self.origin_func = {}
         self.char_features_warmed_up = False
 
     def warm_up_char_features(self):
@@ -53,6 +54,20 @@ class AutoCombatTask(BaseCombatTask, TriggerTask):
         self.use_liberation = self.config.get('Use Liberation')
         if not self.use_liberation and not self.in_world():  # 仅大世界生效
             self.use_liberation = True
+        
+        if hasattr(self, 'test') and callable(getattr(self, 'test')):
+            self.test()
+            return ret
+        if False:
+            self.load_chars()
+            char = self.get_current_char()
+            if hasattr(char, 'test') and callable(getattr(char, 'test')):
+                import types
+                original_in_combat = self.in_combat
+                self.in_combat = types.MethodType(lambda _self: True, self)
+                char.test()
+                self.in_combat = original_in_combat
+        
         combat_start = time.time()
         switched_to_healer = False
         while self.in_combat():

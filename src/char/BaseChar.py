@@ -225,6 +225,10 @@ class BaseChar:
         intact so timing/logging behavior remains consistent.
         """
         self.last_perform = time.time()
+        if hasattr(self, 'test') and callable(getattr(self, 'test')):
+            while True:
+                self.test()
+                self.task.next_frame()
         self.do_perform()
         self.logger.debug(f'set current char false {self.index}')
 
