@@ -2,7 +2,7 @@ import math
 import re
 import time
 from datetime import datetime, timedelta
-
+import threading
 import numpy as np
 
 from ok import BaseTask, Logger, find_boxes_by_name, og, Box
@@ -145,7 +145,7 @@ class BaseWWTask(BaseTask):
     def has_target(self):
         return False
 
-    def walk_to_yolo_echo(self, time_out=8, update_function=None, echo_threshold=0.5):
+    def walk_to_yolo_echo2(self, time_out=8, update_function=None, echo_threshold=0.5):
         last_direction = None
         start = time.time()
         no_echo_start = 0
@@ -186,12 +186,164 @@ class BaseWWTask(BaseTask):
                 update_function()
         self._stop_last_direction(last_direction)
 
-    def _walk_direction(self, last_direction, next_direction):
+    def _walk_direction2(self, last_direction, next_direction):
         if next_direction != last_direction:
             self._stop_last_direction(last_direction)
             if next_direction:
                 self.send_key_down(next_direction)
         return next_direction
+    
+    def check_echos(self, result_event, result_holder, echo_threshold=0.5):
+        echos = self.find_echos(threshold=echo_threshold)
+        result_holder['result'] = echos
+        result_event.set()
+
+    def check_pick_up(self, result_event, result_holder):
+        while not result_event.is_set():
+            if self.find_one('pick_up_f_hcenter_vcenter', box=self.f_search_box, threshold=0.8):
+                result_holder['result'] = 'pick_up_f'
+                result_event.set()
+                break
+            self.sleep(0.01)
+
+    def walk_to_yolo_echo(self, time_out=8, update_function=None, echo_threshold=0.5):
+        stop_event = threading.Event()
+        result_holder = {"picked": False}
+        def monitor_arrival():
+            while not stop_event.is_set():
+                if self.find_one('pick_up_f_hcenter_vcenter', box=self.f_search_box, threshold=0.8):
+                    self.log_info('reached echo')
+                    self.send_key('f')
+                    if not self.handle_claim_button():
+                        self.log_info('found a echo picked')
+                        self._stop_last_direction(last_move_direction)
+                        result_holder["picked"] = True
+                        stop_event.set()
+                self.next_frame()
+
+        monitor_thread = threading.Thread(target=monitor_arrival)
+        monitor_thread.start()
+
+        move_direction = None
+        view_direction = None
+        last_move_direction = None
+        last_send = None
+        start = time.time()
+
+        while time.time() - start < time_out and not stop_event.is_set():
+            self.log_info('find_echos start')
+            echos = self.find_echos(threshold=echo_threshold)
+            self.log_info('find_echos end')
+            if not echos:
+                print('not found echo')
+            else:
+                self.log_info('found echo')
+                echo = echos[0]
+                if echo.y + echo.height > self.height_of_screen(0.65):
+                    self.log_info('backward')
+                    move_direction = 's'
+                    view_direction = None
+                else:
+                    self.log_info('forward')
+                    move_direction = 'w'
+                angle_target = self.get_angle([self.width_of_screen(0.5), self.height_of_screen(0.5)], echo.center())
+                self.log_info(f"angle_target {angle_target}")
+                if angle_target < 20 or angle_target > 340:
+                    self.log_info('angle small')
+                    view_direction = None
+                else:
+                    self.log_info('angle big')
+                    if move_direction == 'w':
+                        if angle_target < 90:
+                            view_direction = 'd'
+                        elif angle_target > 270:
+                            view_direction = 'a'
+                if stop_event.is_set():
+                    break
+                self.log_info('walk_direction start')
+                last_move_direction, send_key_time = self._walk_direction(last_move_direction, move_direction, last_send)
+                self.log_info('walk_direction end')
+                if stop_event.is_set():
+                    break
+                if send_key_time is not None:
+                    last_send = send_key_time
+                if view_direction is not None:
+                    self.log_info('adjust_perspective start')
+                    self.adjust_perspective(view_direction)
+                    self.log_info('adjust_perspective end')
+                if self.has_target():
+                    self.log_info('pick echo has_target return fail')
+                    break
+            if update_function is not None:
+                update_function()
+            self.log_info('-------------------------------')
+
+        self._stop_last_direction(last_move_direction)
+        stop_event.set()  # 确保线程能退出
+        monitor_thread.join()
+        return result_holder["picked"]
+
+    def get_angle(self, start_pos, next_pos):
+        '''
+        计算两个坐标之间的角度   相对以北方向为0度的角度
+        Args:
+            start_pos:
+            next_pos:
+
+        Returns:
+
+        '''
+        # 计算方向向量
+        direction_x = next_pos[0] - start_pos[0]
+        direction_y = next_pos[1] - start_pos[1]
+
+        # 使用反正切函数计算弧度角度值
+        angle_rad = math.atan2(direction_y, direction_x)
+
+        # 将弧度角度值转换为以北方向为0度的角度
+        angle_deg = math.degrees(angle_rad)
+        # 将角度值转换为顺时针方向
+        angle_deg = int((angle_deg + 360 + 90) % 360)
+
+        return angle_deg
+
+    def adjust_perspective(self, direction=None, duration=0.2):
+        if direction is None:
+            return
+        start = time.time()
+        while True:
+            self.send_key_down(direction)
+            self.sleep(0.01)
+            self.middle_click(down_time=0.1, interval=0, after_sleep=0)
+            self.sleep(0.01)
+            self.send_key_up(direction)
+            self.sleep(0.01)
+            if time.time() - start >= duration:
+                break
+
+    def _walk_direction(self, last_direction, next_direction, last_send=None):
+        now = None
+        if next_direction == 'w':
+            if next_direction != last_direction:
+                self._stop_last_direction(last_direction)
+                if next_direction:
+                    self.send_key(next_direction)
+                    self.sleep(0.1)
+                    self.middle_click(down_time=0.1, interval=0, after_sleep=0)
+                    self.sleep(0.1)
+                    self.send_key_down(next_direction)
+                    now = time.time()
+            elif last_send and (time.time() - last_send > 0.3):
+                self.send_key_down(next_direction)
+                now = time.time()
+        elif next_direction == 's':
+            self._stop_last_direction(last_direction)
+            self.send_key(next_direction)
+            now = time.time()
+            self.sleep(0.2)
+            self.middle_click(down_time=0.1, interval=0, after_sleep=0)
+            self.sleep(0.5)
+        return next_direction, now
 
     def _stop_last_direction(self, last_direction):
         if last_direction:
