@@ -2,8 +2,8 @@ import math
 import re
 import time
 from datetime import datetime, timedelta
-
-import numpy as np
+import win32con, ctypes, threading
+from ctypes import Structure, Union, c_ulong, c_int
 
 from ok import BaseTask, Logger, find_boxes_by_name, og, Box
 from ok import CannotFindException
@@ -18,6 +18,27 @@ f_white_color = {
     'b': (235, 255)  # Blue range
 }
 
+class MOUSEINPUT(Structure):
+    _fields_ = [
+        ("dx", c_ulong),
+        ("dy", c_ulong),
+        ("mouseData", c_ulong),
+        ("dwFlags", c_ulong),
+        ("time", c_ulong),
+        ("dwExtraInfo", ctypes.POINTER(c_ulong))
+    ]
+
+class INPUT(Structure):
+    class _INPUT(Union):
+        _fields_ = [("mi", MOUSEINPUT)]
+    _fields_ = [
+        ("type", c_ulong),
+        ("union", _INPUT)
+    ]
+
+SendInput = ctypes.windll.user32.SendInput
+SendInput.argtypes = [c_ulong, ctypes.POINTER(INPUT), c_int]
+SendInput.restype = c_ulong
 
 class BaseWWTask(BaseTask):
     map_zoomed = False
@@ -144,8 +165,92 @@ class BaseWWTask(BaseTask):
 
     def has_target(self):
         return False
+    
+    def walk_to_yolo_echo2(self, time_out=8, update_function=None, echo_threshold=0.5):
+        stop_event = threading.Event()
+        result_holder = {"picked": False}
+        def monitor_arrival():
+            while not stop_event.is_set():
+                frame = self.executor.nullable_frame()
+                if frame is not None and self.find_one('pick_up_f_hcenter_vcenter', frame=frame, box=self.f_search_box, threshold=0.8):
+                    if self.pick_echo():
+                        self.log_info('found a echo picked')
+                        self._stop_last_direction(last_move_direction)
+                        result_holder["picked"] = True
+                        stop_event.set()
+                time.sleep(0.02)
+
+        monitor_thread = threading.Thread(target=monitor_arrival)
+        monitor_thread.start()
+
+        move_direction = None
+        last_move_direction = None
+        start = time.time()
+        while time.time() - start < time_out and not stop_event.is_set():
+            self.next_frame()
+            echos = self.find_echos(threshold=echo_threshold)
+            if echos:
+                self.log_info('found echo')
+                echo = echos[0]
+                if echo.y + echo.height > self.height_of_screen(0.65):
+                    move_direction = 's'
+                else:
+                    move_direction = 'w'
+                    self.turn_camera_to_target(echo.center()[0])
+                    self.sleep(0.1)
+            if move_direction is not None:
+                if stop_event.is_set():
+                    break
+                last_move_direction = self._walk_direction(last_move_direction, move_direction)
+            if self.in_combat():
+                self.log_debug('pick echo has_target return fail')
+                break
+            if update_function is not None:
+                update_function()
+
+        self._stop_last_direction(last_move_direction)
+        stop_event.set()
+        monitor_thread.join()
+        return result_holder["picked"]
+
+    def mouse_moveR(self, dx, dy):
+        inputs = (INPUT * 1)()
+        inputs[0].type = 0
+        inputs[0].union.mi = MOUSEINPUT(dx, dy, 0, win32con.MOUSEEVENTF_MOVE, 0, None)
+        ptr = ctypes.cast(inputs, ctypes.POINTER(INPUT))
+        SendInput(1, ptr, ctypes.sizeof(INPUT))
+
+    def turn_camera_to_target(self, target_x, fov_deg=100, ratio=6.0, fault=6):
+        """
+        将目标 target_x 映射为角度并转化为鼠标移动 dx 以转动镜头。
+        Args:
+            target_x: 目标在屏幕上的 x 像素位置
+            fov_deg: 水平视野角度，默认 100°
+            ratio: 每度视角对应的鼠标 dx (需根据实测调整)
+            fault: 最少容差，默认 6
+        """
+        angle = self.screen_x_to_angle(target_x, fov_deg)
+        if abs(angle) < fault:
+            return
+        dx = int(angle * ratio)  # 四舍五入为整数
+        self.mouse_moveR(dx, 0)
+
+    def screen_x_to_angle(self, target_x, fov_deg=100):
+        center_x = self.width_of_screen(0.5)
+        # 计算屏幕偏移归一化 -1.0 ~ 1.0
+        offset = (target_x - center_x) / center_x
+
+        # FOV 角度转弧度
+        fov_rad = math.radians(fov_deg)
+        
+        # 按照透视投影反推
+        angle_rad = math.atan(offset * math.tan(fov_rad / 2))
+        angle_deg = math.degrees(angle_rad)
+        return angle_deg
 
     def walk_to_yolo_echo(self, time_out=8, update_function=None, echo_threshold=0.5):
+        if self.task.executor.interaction.capture.hwnd_window.is_foreground():
+            return self.walk_to_yolo_echo2(time_out, update_function, echo_threshold)
         last_direction = None
         start = time.time()
         no_echo_start = 0

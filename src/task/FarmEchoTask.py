@@ -31,6 +31,7 @@ class FarmEchoTask(WWOneTimeTask, BaseCombatTask):
         self._has_treasure = False
         self._in_realm = False
         self._farm_start_time = time.time()
+        self.target_enemy_time_out = 1.2
 
     def on_combat_check(self):
         self.incr_drop(self.pick_f(handle_claim=True))
