@@ -36,6 +36,10 @@ class Cartethyia(BaseChar):
     def count_base_priority(self):
         return 10
     
+    def test2(self):
+        # print(self.task.executor.interaction.capture.hwnd_window.is_foreground())
+        self.task.walk_to_yolo_echo2()
+
     def do_perform(self):
         if self.has_intro:
             self.continues_normal_attack(1.4)   

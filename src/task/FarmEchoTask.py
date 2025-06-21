@@ -88,12 +88,15 @@ class FarmEchoTask(WWOneTimeTask, BaseCombatTask):
             self.sleep(self.config.get("Combat Wait Time", 0))
 
             self.combat_once(wait_combat_time=0, raise_if_not_found=False)
+            logger.info(f'start finding echo')
             if self.pick_echo():
                 logger.info(f'farm echo on the face')
                 dropped = True
             elif self.config.get('Echo Pickup Method', "Yolo") == "Yolo":
                 dropped = \
                     self.yolo_find_echo(turn=self._in_realm, use_color=False, time_out=time_out, threshold=threshold)[0]
+                while dropped and not self.in_combat():
+                    dropped = self.yolo_find_echo(turn=True, use_color=False, time_out=time_out, threshold=threshold)[0]
                 logger.info(f'farm echo yolo find {dropped}')
             elif self.config.get('Echo Pickup Method', "Yolo") == "Run in Circle":
                 dropped = self.run_in_circle_to_find_echo(circle_count=2)

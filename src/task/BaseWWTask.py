@@ -168,29 +168,43 @@ class BaseWWTask(BaseTask):
     
     def walk_to_yolo_echo2(self, time_out=8, update_function=None, echo_threshold=0.5):
         stop_event = threading.Event()
-        result_holder = {"picked": False}
-        def monitor_arrival():
+        result_holder = {"picked": False, "echos": None}
+        # def find_pick():
+        #     while not stop_event.is_set():
+        #         frame = self.executor.nullable_frame()
+        #         if frame is not None and self.find_one('pick_up_f_hcenter_vcenter', frame=frame, box=self.f_search_box, threshold=0.8):
+        #             if self.pick_echo():
+        #                 self.log_info('found a echo picked')
+        #                 self._stop_last_direction(last_move_direction)
+        #                 result_holder["picked"] = True
+        #                 stop_event.set()
+        #         time.sleep(0.03)
+
+        def find_echo():
             while not stop_event.is_set():
-                frame = self.executor.nullable_frame()
-                if frame is not None and self.find_one('pick_up_f_hcenter_vcenter', frame=frame, box=self.f_search_box, threshold=0.8):
-                    if self.pick_echo():
-                        self.log_info('found a echo picked')
-                        self._stop_last_direction(last_move_direction)
-                        result_holder["picked"] = True
-                        stop_event.set()
+                result_holder["echos"] = self.find_echos(frame= , threshold=echo_threshold)
                 time.sleep(0.02)
 
-        monitor_thread = threading.Thread(target=monitor_arrival)
+        monitor_thread = threading.Thread(target=find_echo)
         monitor_thread.start()
 
         move_direction = None
         last_move_direction = None
+        picked = False
         start = time.time()
-        while time.time() - start < time_out and not stop_event.is_set():
+        while time.time() - start < time_out:
             self.next_frame()
-            echos = self.find_echos(threshold=echo_threshold)
+            self.frame
+            if self.pick_echo():
+                self.log_info('found a echo picked')
+                picked = True
+                break
+            if self.in_combat():
+                self.log_info('pick echo has_target return fail')
+                break
+            echos = result_holder["echos"]
             if echos:
-                self.log_info('found echo')
+                self.log_debug('found echo')
                 echo = echos[0]
                 if echo.y + echo.height > self.height_of_screen(0.65):
                     move_direction = 's'
@@ -199,19 +213,14 @@ class BaseWWTask(BaseTask):
                     self.turn_camera_to_target(echo.center()[0])
                     self.sleep(0.1)
             if move_direction is not None:
-                if stop_event.is_set():
-                    break
                 last_move_direction = self._walk_direction(last_move_direction, move_direction)
-            if self.in_combat():
-                self.log_debug('pick echo has_target return fail')
-                break
             if update_function is not None:
                 update_function()
 
         self._stop_last_direction(last_move_direction)
         stop_event.set()
         monitor_thread.join()
-        return result_holder["picked"]
+        return picked
 
     def mouse_moveR(self, dx, dy):
         inputs = (INPUT * 1)()
@@ -220,7 +229,7 @@ class BaseWWTask(BaseTask):
         ptr = ctypes.cast(inputs, ctypes.POINTER(INPUT))
         SendInput(1, ptr, ctypes.sizeof(INPUT))
 
-    def turn_camera_to_target(self, target_x, fov_deg=100, ratio=6.0, fault=6):
+    def turn_camera_to_target(self, target_x, fov_deg=100, ratio=7.0, fault=6):
         """
         将目标 target_x 映射为角度并转化为鼠标移动 dx 以转动镜头。
         Args:
@@ -249,7 +258,7 @@ class BaseWWTask(BaseTask):
         return angle_deg
 
     def walk_to_yolo_echo(self, time_out=8, update_function=None, echo_threshold=0.5):
-        if self.task.executor.interaction.capture.hwnd_window.is_foreground():
+        if self.executor.interaction.capture.hwnd_window.is_foreground():
             return self.walk_to_yolo_echo2(time_out, update_function, echo_threshold)
         last_direction = None
         start = time.time()
@@ -588,7 +597,7 @@ class BaseWWTask(BaseTask):
         result = self.executor.ocr_lib(image, use_det=True, use_cls=False, use_rec=True)
         self.logger.info(f'ocr_result {result}')
 
-    def find_echos(self, threshold=0.3):
+    def find_echos(self, frame=None, threshold=0.3):
         """
         Main function to load ONNX model, perform inference, draw bounding boxes, and display the output image.
 
@@ -599,6 +608,8 @@ class BaseWWTask(BaseTask):
         Returns:
             list: List of dictionaries containing detection information such as class_id, class_name, confidence, etc.
         """
+        if frame is None:
+            frame = self.frame
         # Load the ONNX model
         ret = og.my_app.yolo_detect(self.frame, threshold=threshold, label=0)
 
@@ -666,6 +677,8 @@ class BaseWWTask(BaseTask):
         for i in range(4):
             if turn:
                 self.center_camera()
+            if self.in_combat():
+                break
             echos = self.find_echos(threshold=threshold)
             max_echo_count = max(max_echo_count, len(echos))
             self.log_debug(f'max_echo_count {max_echo_count}')
@@ -882,13 +895,13 @@ class BaseWWTask(BaseTask):
             if current_direction:
                 self.mouse_up(key='right')
                 self.send_key_up(current_direction)
-                self.sleep(0.2)
+                self.wait_until(self.in_combat, time_out=0.2)
             self.turn_direction(new_direction)
             self.send_key_down('w')
-            self.sleep(0.2)
+            self.wait_until(self.in_combat, time_out=0.2)
             self.mouse_down(key='right')
             current_direction = 'w'  # After turning, we always move forward
-            self.sleep(1)
+            self.wait_until(self.in_combat, time_out=1)
 
         return current_direction, current_adjust, False
 
