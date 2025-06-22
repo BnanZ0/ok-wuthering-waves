@@ -115,6 +115,7 @@ class BaseChar:
 
     def perform(self):
         """执行当前角色的主要战斗行动序列。"""
+        self.task.is_performing = True
         self.last_perform = time.time()
         if hasattr(self, 'test') and callable(getattr(self, 'test')):
             while True:
@@ -124,6 +125,7 @@ class BaseChar:
             self.do_fast_perform()
         else:
             self.do_perform()
+        self.task.is_performing = False
         self.logger.debug(f'set current char false {self.index}')
 
     def wait_down(self):
