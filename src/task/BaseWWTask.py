@@ -4,6 +4,8 @@ import time
 from datetime import datetime, timedelta
 
 import numpy as np
+import win32con, ctypes
+from ctypes import Structure, Union, c_ulong, c_int
 
 from ok import BaseTask, Logger, find_boxes_by_name, og, Box
 from ok import CannotFindException
@@ -19,6 +21,27 @@ f_white_color = {
 }
 processed_feature = False
 
+class MOUSEINPUT(Structure):
+    _fields_ = [
+        ("dx", c_ulong),
+        ("dy", c_ulong),
+        ("mouseData", c_ulong),
+        ("dwFlags", c_ulong),
+        ("time", c_ulong),
+        ("dwExtraInfo", ctypes.POINTER(c_ulong))
+    ]
+
+class INPUT(Structure):
+    class _INPUT(Union):
+        _fields_ = [("mi", MOUSEINPUT)]
+    _fields_ = [
+        ("type", c_ulong),
+        ("union", _INPUT)
+    ]
+
+SendInput = ctypes.windll.user32.SendInput
+SendInput.argtypes = [c_ulong, ctypes.POINTER(INPUT), c_int]
+SendInput.restype = c_ulong
 
 class BaseWWTask(BaseTask):
     map_zoomed = False
@@ -174,6 +197,108 @@ class BaseWWTask(BaseTask):
 
     def has_target(self):
         return False
+    
+    def yolo_find_echo_selector(self, use_color=False, turn=True, update_function=None, time_out=8, threshold=0.5):
+        if self.executor.interaction.capture.hwnd_window.is_foreground():
+            return self.yolo_find_echo2(turn=turn, update_function=update_function, time_out=time_out, threshold=threshold)
+        else:
+            return self.yolo_find_echo(use_color=use_color, turn=turn, update_function=update_function, time_out=time_out, threshold=threshold)
+        
+    def yolo_find_echo2(self, turn=True, update_function=None, time_out=8, threshold=0.5):
+        max_echo_count = 0
+        if self.pick_echo():
+            self.sleep(0.5)
+            return True, True
+        for i in range(4):
+            if self.in_combat():
+                break
+            if turn and self.center_camera():
+                break
+            echos = self.find_echos(threshold=threshold)
+            max_echo_count = max(max_echo_count, len(echos))
+            self.log_debug(f'max_echo_count {max_echo_count}')
+            if echos:
+                self.log_info(f'yolo found echo {echos}')
+                return self.walk_to_yolo_echo2(update_function=update_function, time_out=time_out, echo_threshold=threshold), max_echo_count > 1
+            if not turn and i == 0:
+                return False, max_echo_count > 1
+            self.send_key('a', down_time=0.05)
+            if self.wait_until(self.in_combat, time_out=0.5):
+                break
+        return False, max_echo_count > 1
+    
+    def walk_to_yolo_echo2(self, time_out=8, update_function=None, echo_threshold=0.5):
+        move_direction = None
+        last_move_direction = None
+        start = time.time()
+        picked = False
+        while time.time() - start < time_out:
+            self.next_frame()
+            if picked := self.pick_f():
+                break
+            if self.in_combat():
+                self.log_info('pick echo has_target return fail')
+                break
+            if picked := self.pick_f():
+                break
+            echos = self.find_echos(threshold=echo_threshold)
+            if picked := self.pick_f():
+                break
+            if echos:
+                time_out += 2
+                self.log_debug('found echo')
+                echo = echos[0]
+                if echo.y + echo.height > self.height_of_screen(0.65):
+                    move_direction = 's'
+                else:
+                    move_direction = 'w'
+                    self.turn_camera_to_target(echo.center()[0])
+                    if picked := self.wait_until(self.pick_f, time_out=0.1):
+                        self.send_key('f')
+                        break
+            if picked := self.pick_f():
+                break
+            if move_direction is not None:
+                last_move_direction = self._walk_direction(last_move_direction, move_direction)
+            if update_function is not None:
+                update_function()
+        self._stop_last_direction(last_move_direction)
+        return picked
+
+    def mouse_moveR(self, dx, dy):
+        inputs = (INPUT * 1)()
+        inputs[0].type = 0
+        inputs[0].union.mi = MOUSEINPUT(dx, dy, 0, win32con.MOUSEEVENTF_MOVE, 0, None)
+        ptr = ctypes.cast(inputs, ctypes.POINTER(INPUT))
+        SendInput(1, ptr, ctypes.sizeof(INPUT))
+
+    def turn_camera_to_target(self, target_x, fov_deg=100, ratio=7.0, fault=6):
+        """
+        将目标 target_x 映射为角度并转化为鼠标移动 dx 以转动镜头。
+        Args:
+            target_x: 目标在屏幕上的 x 像素位置
+            fov_deg: 水平视野角度，默认 100°
+            ratio: 每度视角对应的鼠标 dx (需根据实测调整)
+            fault: 最少容差，默认 6
+        """
+        angle = self.screen_x_to_angle(target_x, fov_deg)
+        if abs(angle) < fault:
+            return
+        dx = int(angle * ratio)  # 四舍五入为整数
+        self.mouse_moveR(dx, 0)
+
+    def screen_x_to_angle(self, target_x, fov_deg=100):
+        center_x = self.width_of_screen(0.5)
+        # 计算屏幕偏移归一化 -1.0 ~ 1.0
+        offset = (target_x - center_x) / center_x
+
+        # FOV 角度转弧度
+        fov_rad = math.radians(fov_deg)
+        
+        # 按照透视投影反推
+        angle_rad = math.atan(offset * math.tan(fov_rad / 2))
+        angle_deg = math.degrees(angle_rad)
+        return angle_deg
 
     def walk_to_yolo_echo(self, time_out=8, update_function=None, echo_threshold=0.5):
         last_direction = None

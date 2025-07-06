@@ -88,14 +88,14 @@ class FarmEchoTask(WWOneTimeTask, BaseCombatTask):
                 self.go_to_boss_minimap()
 
             self.sleep(self.config.get("Combat Wait Time", 0))
-
             self.combat_once(wait_combat_time=0, raise_if_not_found=False)
+            logger.info(f'start finding echo')
             if self.pick_echo():
                 logger.info(f'farm echo on the face')
                 dropped = True
             elif self.config.get('Echo Pickup Method', "Yolo") == "Yolo":
                 dropped = \
-                    self.yolo_find_echo(turn=self._in_realm, use_color=False, time_out=time_out, threshold=threshold)[0]
+                    self.yolo_find_echo_selector(turn=self._in_realm, use_color=False, time_out=time_out, threshold=threshold)[0]
                 logger.info(f'farm echo yolo find {dropped}')
             elif self.config.get('Echo Pickup Method', "Yolo") == "Run in Circle":
                 dropped = self.run_in_circle_to_find_echo(circle_count=2)
@@ -104,6 +104,11 @@ class FarmEchoTask(WWOneTimeTask, BaseCombatTask):
                 dropped = self.walk_find_echo()
                 logger.info(f'farm echo walk_find_echo {dropped}')
             self.incr_drop(dropped)
+            if dropped and not self._in_realm and self.config.get('Echo Pickup Method', "Yolo") == "Yolo" and not self.in_combat():
+                while dropped and not self.in_combat():
+                    dropped = self.yolo_find_echo_selector(turn=True, use_color=False, time_out=time_out, threshold=threshold)[0]
+                    self.incr_drop(dropped)
+                dropped = True
             if dropped and not self._has_treasure:
                 self.wait_until(self.in_combat, raise_if_not_found=False, time_out=5)
             else:
