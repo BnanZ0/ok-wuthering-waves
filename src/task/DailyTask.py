@@ -45,10 +45,11 @@ class DailyTask(WWOneTimeTask, BaseCombatTask):
                     self.get_task_by_class(TacetTask).farm_tacet(daily=True, used_stamina=used_stamina,
                                                                  config=self.config)
                 else:
+                    self.use_echo_box()
                     self.get_task_by_class(ForgeryTask).farm_forgery(daily=True, used_stamina=used_stamina,
-                                                                     config=self.config)
-                    self.sleep(2)
-                    self.get_task_by_class(ForgeryTask).purification_material()
+                                                                    config=self.config)
+                    # self.sleep(2)
+                    # self.get_task_by_class(ForgeryTask).purification_material()
                 self.sleep(4)
             if self.config.get('Which to Farm', self.support_tasks[0]) == self.support_tasks[0]:
                 try:
@@ -61,6 +62,23 @@ class DailyTask(WWOneTimeTask, BaseCombatTask):
         self.claim_mail()
         self.claim_millage()
         self.log_info('Task completed', notify=True)
+
+    def use_echo_box(self):
+        self.send_key('b', after_sleep=1)
+        self.wait_book()
+        self.click_relative(0.03, 0.88, after_sleep=1)
+        self.click_relative(0.49, 0.76, after_sleep=1)
+        if not self.wait_ocr(0.68, 0.51, 0.79, 0.54, match=re.compile(r'无音区'), settle_time=1, raise_if_not_found=False, log=True):
+            self.ensure_main()
+            return
+        self.click_relative(0.89, 0.91, after_sleep=1)
+        if not self.wait_ocr(0.18, 0.18, 0.27, 0.23, match=re.compile(r'未诞的'), settle_time=1, raise_if_not_found=False, log=True):
+            self.ensure_main()
+            return
+        self.click_relative(0.77, 0.578, after_sleep=1)
+        self.click_relative(0.36, 0.54, after_sleep=1)
+        self.click_relative(0.69, 0.72, after_sleep=1)
+        self.ensure_main()
 
     def claim_millage(self):
         self.log_info('open_millage')
@@ -82,7 +100,7 @@ class DailyTask(WWOneTimeTask, BaseCombatTask):
         self.click_box(gray_book_quest, after_sleep=1.5)
         progress = self.ocr(0.1, 0.1, 0.5, 0.75, match=re.compile(r'^(\d+)/180$'))
         if not progress:
-            self.click(0.96, 0.56, after_sleep=1)
+            self.click(0.96, 0.6, after_sleep=1)
             progress = self.ocr(0.1, 0.1, 0.5, 0.75, match=re.compile(r'^(\d+)/180$'))
         if progress:
             current = int(progress[0].name.split('/')[0])
