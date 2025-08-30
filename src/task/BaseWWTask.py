@@ -1,12 +1,12 @@
-import math
+import math, threading
 import re
 import time
 from datetime import datetime, timedelta
 
 import numpy as np
 
-from ok import BaseTask, Logger, find_boxes_by_name, og, find_color_rectangles, mask_white
-from ok import CannotFindException
+from ok import BaseTask, Logger, find_boxes_by_name, og, find_color_rectangles, mask_white, run_in_new_thread
+from ok import CannotFindException, ForegroundPostMessageInteraction
 import cv2
 
 logger = Logger.get_logger(__name__)
@@ -133,6 +133,123 @@ class BaseWWTask(BaseTask):
 
     def has_target(self):
         return False
+    
+    def yolo_find_echo_selector(self, use_color=False, turn=True, update_function=None, time_out=8, threshold=0.5):
+        if og.device_manager.hwnd_window.is_foreground():
+            return self.yolo_find_echo2(turn=turn, update_function=update_function, time_out=time_out, threshold=threshold)
+        else:
+            return self.yolo_find_echo(use_color=use_color, turn=turn, update_function=update_function, time_out=time_out, threshold=threshold)
+    
+    def yolo_find_echo2(self, turn=True, update_function=None, time_out=8, threshold=0.5):
+        max_echo_count = 0
+        if self.pick_echo():
+            self.sleep(0.5)
+            return True, True
+        pick_stop_event = threading.Event()
+        pick_result = {"picked": False}
+        pick_thread = run_in_new_thread(lambda: self.pick_f_with_lock(pick_stop_event, pick_result))
+        for i in range(4):
+            if turn:
+                self.click(0.5, 0.5, down_time=0.2, after_sleep=1, key='middle')
+            echos = self.find_echos(threshold=threshold)
+            if pick_stop_event.is_set():
+                break
+            max_echo_count = max(max_echo_count, len(echos))
+            self.log_debug(f'max_echo_count {max_echo_count}')
+            if echos:
+                self.log_info(f'yolo found echo {echos}')
+                self.walk_to_yolo_echo2(pick_stop_event, update_function=update_function, time_out=time_out, echo_threshold=threshold)
+                if pick_stop_event.is_set():
+                    break
+            if not turn and i == 0:
+                break
+            self.send_key('a', down_time=0.05)
+        pick_stop_event.set()
+        pick_thread.join()
+        return pick_result['picked'], max_echo_count > 1
+    
+    def walk_to_yolo_echo2(self, pick_stop_event: threading.Event, time_out=8, update_function=None, echo_threshold=0.5):
+        move_direction = None
+        last_move_direction = None
+        start = time.time()
+        double_time_out = time_out * 2
+        while time.time() - start < time_out and not pick_stop_event.is_set():
+            self.sleep(0.02)
+            echos = self.find_echos(threshold=echo_threshold)
+            if pick_stop_event.is_set():
+                break
+            if echos:
+                if time_out < double_time_out:
+                    time_out += 2
+                self.log_debug('found echo')
+                echo = echos[0]
+                if echo.y + echo.height > self.height_of_screen(0.65):
+                    move_direction = 's'
+                else:
+                    move_direction = 'w'
+                    self.turn_camera_to_target(echo.center()[0])
+            if move_direction is not None:
+                last_move_direction = self._walk_direction(last_move_direction, move_direction)
+            if update_function is not None:
+                update_function()
+        self._stop_last_direction(last_move_direction)
+
+    def pick_f_with_lock(self, pick_stop_event: threading.Event, pick_result):
+        picked = in_combat = False
+        try:
+            while not pick_stop_event.is_set() and not self.exit_is_set():
+                self.sleep(0.02)
+                with self.lock:
+                    picked = self.pick_f()
+                if self.executor.current_task is None:
+                    return
+                if picked:
+                    self.log_info('picked echo')
+                    pick_stop_event.set()
+                else:
+                    with self.lock:
+                        in_combat = self.in_combat()
+                    if self.executor.current_task is None:
+                        return
+                if in_combat:
+                    self.log_info('in combat')
+                    pick_stop_event.set()
+                if pick_stop_event.is_set():
+                    pick_result["picked"] = picked
+                    return
+        except Exception:
+            pass
+
+    def turn_camera_to_target(self, target_x, fov_deg=100, ratio=7.0, fault=6):
+        """
+        将目标 target_x 映射为角度并转化为鼠标移动 dx 以转动镜头。
+        Args:
+            target_x: 目标在屏幕上的 x 像素位置
+            fov_deg: 水平视野角度，默认 100°
+            ratio: 每度视角对应的鼠标 dx (需根据实测调整)
+            fault: 最少容差，默认 6
+        """
+        angle = self.screen_x_to_angle(target_x, fov_deg)
+        if abs(angle) < fault:
+            return
+        dx = int(angle * ratio)  # 四舍五入为整数
+        if not hasattr(self, 'foreground_interaction') or self.foreground_interaction is None:
+            self.foreground_interaction = ForegroundPostMessageInteraction(og.device_manager.capture_method, og.device_manager.hwnd_window)
+        self.foreground_interaction.try_activate()
+        self.foreground_interaction.move_mouse_relative(dx, 0)
+
+    def screen_x_to_angle(self, target_x, fov_deg=100):
+        center_x = self.width_of_screen(0.5)
+        # 计算屏幕偏移归一化 -1.0 ~ 1.0
+        offset = (target_x - center_x) / center_x
+
+        # FOV 角度转弧度
+        fov_rad = math.radians(fov_deg)
+        
+        # 按照透视投影反推
+        angle_rad = math.atan(offset * math.tan(fov_rad / 2))
+        angle_deg = math.degrees(angle_rad)
+        return angle_deg
 
     def walk_to_yolo_echo(self, time_out=8, update_function=None, echo_threshold=0.5):
         last_direction = None
@@ -489,7 +606,9 @@ class BaseWWTask(BaseTask):
             list: List of dictionaries containing detection information such as class_id, class_name, confidence, etc.
         """
         # Load the ONNX model
-        ret = og.my_app.yolo_detect(self.frame, threshold=threshold, label=0)
+        with self.lock:
+            _frame = self.frame
+        ret = og.my_app.yolo_detect(_frame, threshold=threshold, label=0)
 
         for box in ret:
             box.y += box.height * 1 / 3
