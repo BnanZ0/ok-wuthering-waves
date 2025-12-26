@@ -882,6 +882,24 @@ class BaseCombatTask(CombatCheck):
                 for c in self.chars:
                     self.log_info(f'loaded chars success {c} {c.confidence}')
             return True
+        
+    def load_single_char(self):
+        self.load_hotkey()
+        # self.log_info('load chars')
+        self.chars[0] = get_char_by_pos(self, self.get_box_by_name('box_char_1'), 0, safe_get(self.chars, 0))
+
+        for char in self.chars:
+            if char is not None:
+                char.reset_state()
+                if char.index == 0:
+                    char.is_current_char = True
+                else:
+                    char.is_current_char = False
+        self.combat_start = time.time()
+        if len(self.chars) > 1:
+            self.chars = self.chars[:1]
+        if self.chars[0] is not None:
+            return True
 
     @staticmethod
     def _char_identity(chars):

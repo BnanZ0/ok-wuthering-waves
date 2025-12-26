@@ -23,12 +23,15 @@ class AutoCombatTask(BaseCombatTask, TriggerTask):
             'Use Liberation': True,
             'Check Levitator': True,
             'Switch to Healer before and after Combat': True,
+            'Single Character': False,
         })
         self.config_description = {
             'Auto Target': 'Turn off to enable auto combat only when manually target enemy using middle click',
             'Use Liberation': 'Do not use Liberation in Open World to Save Time',
             'Check Levitator': 'Toggle the levitator and verify if the character is floating',
             'Switch to Healer before and after Combat': 'Better Chance to Keep Character Alive',
+            'Single Character': 'Storyline use only. Character specific bugs will not be fixed',
+            'Force Two Characters': 'Force only use two characters'
         }
         self.op_index = 0
         self.origin_func = {}
@@ -47,6 +50,7 @@ class AutoCombatTask(BaseCombatTask, TriggerTask):
         logger.info(f'warm_up_char_features loaded {len(char_names)} character templates')
 
     def run(self):
+        self.toggle_single_character_mode()
         self.warm_up_char_features()
         ret = False
         if not self.scene.in_team(self.in_team_and_world):
@@ -106,6 +110,41 @@ class AutoCombatTask(BaseCombatTask, TriggerTask):
         self.last_is_click = not self.last_is_click
         self.op_index += 1
         self.sleep(0.02)
+
+    def toggle_single_character_mode(self):
+        close_single_mode = False
+        single_mode = self.config.get('Single Character')
+        if single_mode:
+            if self.origin_func and self.origin_func["in_team"]()[0]:
+                close_single_mode = True
+            if not self.origin_func:
+                self.log_info("Single Character Mode Enabled")
+                self.origin_func["in_team"] = self.in_team
+                self.origin_func["load_chars"] = self.load_chars
+                self.origin_func["switch_next_char"] = self.switch_next_char
+                self.in_team = self.single_character_in_team
+                self.load_chars = self.load_single_char
+                self.switch_next_char = self.single_character_switch_next
+
+        if not single_mode and self.origin_func or close_single_mode:
+            self.log_info("Single Character Mode Disabled")
+            self.chars = [None, None, None]
+            self.in_team = self.origin_func["in_team"]
+            self.load_chars = self.origin_func["load_chars"]
+            self.switch_next_char = self.origin_func["switch_next_char"]
+            self.origin_func.clear()
+
+    def single_character_in_team(self):
+        box = self.box_of_screen(0.7867, 0.9250, 0.9566, 0.9542)
+        if self.find_best_match_in_box(to_find=["r", "e"], box=box, threshold=0.75):
+            self._logged_in = True
+            return True, 0, 1
+        else:
+            return False, -1, 1
+
+    def single_character_switch_next(self, *args, **kwargs):
+        self.click(interval=0.1)
+        self.send_key('f', after_sleep=0.1)
 
 
 from ok import run_task
