@@ -4,6 +4,7 @@ from ok import TriggerTask, Logger
 from src.char.CharFactory import char_names
 from src.scene.WWScene import WWScene
 from src.task.BaseCombatTask import BaseCombatTask, NotInCombatException, CharDeadException
+from src.task.BaseWWTask import f_white_color
 
 logger = Logger.get_logger(__name__)
 
@@ -24,6 +25,7 @@ class AutoCombatTask(BaseCombatTask, TriggerTask):
             'Check Levitator': True,
             'Switch to Healer before and after Combat': True,
             'Single Character': False,
+            'Force Two Characters': False,
         })
         self.config_description = {
             'Auto Target': 'Turn off to enable auto combat only when manually target enemy using middle click',
@@ -141,6 +143,18 @@ class AutoCombatTask(BaseCombatTask, TriggerTask):
             return True, 0, 1
         else:
             return False, -1, 1
+
+    def in_team(self):
+        in_team, current_index, count = super().in_team()
+        if count == 3 and self.config.get('Force Two Characters'):
+            count = 2
+        return in_team, current_index, count
+
+    def on_combat_check(self):
+        if (box := self.find_one('new_realm_4')):
+            if self.calculate_color_percentage(f_white_color, box) > 0.5:
+                self.send_key('4', interval=0.25)
+        return True
 
     def single_character_switch_next(self, *args, **kwargs):
         self.click(interval=0.1)
