@@ -36,6 +36,7 @@ class DailyTask(WWOneTimeTask, BaseCombatTask):
             'Material Selection': 'Shell Credit',
             'Farm Nightmare Nest for Daily Echo': True,
             ADDITIONAL_TASKS: [CHECK_WEEKLY_GARDEN],
+            '轮换任务': True,
         }
         self.config_description = {
             'Which Tacet Suppression to Farm': 'The Tacet Suppression number in the F2 list.',
@@ -45,7 +46,7 @@ class DailyTask(WWOneTimeTask, BaseCombatTask):
             ADDITIONAL_TASKS: 'Select optional tasks. Nightmare Nest runs before stamina farming to help complete '
                               'the daily task; the other tasks run afterward.',
         }
-        material_option_list = ['Resonator EXP', 'Weapon EXP', 'Shell Credit']
+        self.material_option_list = ['Resonator EXP', 'Weapon EXP', 'Shell Credit']
         self.config_type = {
             'Which to Farm': {
                 'type': "drop_down",
@@ -59,7 +60,7 @@ class DailyTask(WWOneTimeTask, BaseCombatTask):
             },
             'Material Selection': {
                 'type': 'drop_down',
-                'options': material_option_list
+                'options': self.material_option_list
             },
             ADDITIONAL_TASKS: {
                 'type': 'multi_selection',
@@ -134,6 +135,7 @@ class DailyTask(WWOneTimeTask, BaseCombatTask):
         self.claim_battle_pass()
         self.run_additional_tasks()
         self.log_info('Daily Task Completed', notify=True)
+        self.rotate_task()
 
     def validate_additional_tasks(self):
         additional_tasks = self.config.get(ADDITIONAL_TASKS) or []
@@ -263,6 +265,32 @@ class DailyTask(WWOneTimeTask, BaseCombatTask):
         self.click(0.64, 0.95, after_sleep=1)
         self.click(0.14, 0.9, after_sleep=1)
         self.ensure_main(time_out=10)
+
+    def rotate_task(self):
+        if self.config.get('轮换任务', False):
+            target = self.config.get('Which to Farm')
+            if target == self.support_tasks[1]:
+                if self.config.get('Which Forgery Challenge to Farm', 1) >= 5:
+                    next_forgery = 1
+                else:
+                    next_forgery = self.config.get('Which Forgery Challenge to Farm', 1) + 1
+                self._setup_config({
+                    'Which Forgery Challenge to Farm': next_forgery,
+                })
+            elif target == self.support_tasks[2]:
+                current_material = self.config.get('Material Selection', 'Shell Credit')
+                try:
+                    current_index = self.material_option_list.index(current_material)
+                except ValueError:
+                    current_index = -1
+                next_material = self.material_option_list[(current_index + 1) % len(self.material_option_list)]
+                self._setup_config({
+                    'Material Selection': next_material,
+                })
+
+    def _setup_config(self, dict_config: dict):
+        self.config.update(dict_config)
+        self.config.save_file()
 
 
 from ok import run_task
