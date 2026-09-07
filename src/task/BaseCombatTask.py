@@ -611,10 +611,11 @@ class BaseCombatTask(CombatCheck):
         # if self.debug:
         #     self.screenshot(f'switch_next_char_{current_con}')
         from src.char.ShoreKeeper import ShoreKeeper
+        from src.char.Ciaccona import Ciaccona
         last_click = 0
         start = time.time()
         while True:
-            if not (isinstance(switch_to, ShoreKeeper) and has_intro):
+            if not (isinstance(switch_to, ShoreKeeper) and has_intro) and not isinstance(current_char, Ciaccona):
                 self.check_combat()
             now = time.time()
             _, current_index, _ = self.in_team()
