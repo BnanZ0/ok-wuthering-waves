@@ -91,11 +91,15 @@ class DomainTask(WWOneTimeTask, BaseCombatTask):
             self.pick_f()
             try:
                 self.combat_once()
-                self.sleep(3)
-                self.walk_to_treasure()
-                self.pick_f(handle_claim=False)
             except (NotInCombatException, CharDeadException):
                 self.log_info(self.tr('farm_in_domain: death recovered, exiting domain'))
+                self.make_sure_in_world()
+                return False, must_use
+            self.walk_to_treasure()
+            self.pick_f(handle_claim=False)
+            self.sleep(2)
+            if not self.has_claim_stamina():
+                self.log_info('is not claim treasure, restart challenge')
                 self.make_sure_in_world()
                 return False, must_use
             can_continue, used = self.use_stamina(once=self.stamina_once, must_use=must_use)
